@@ -10,6 +10,7 @@ fn config() -> Config {
         minimum_one: false,
         minimum_cc: 0,
         additional_inputs: Vec::new(),
+        ranges: Default::default(),
         bindings: targets()
             .into_iter()
             .enumerate()

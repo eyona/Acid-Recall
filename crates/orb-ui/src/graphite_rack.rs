@@ -4,6 +4,7 @@ use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Ui,
 
 use crate::app::App;
 use crate::layout;
+use crate::midi::MidiMenu;
 
 pub const WIDTH: f32 = 1760.0;
 pub const HEIGHT: f32 = 1300.0;
@@ -183,7 +184,7 @@ pub(crate) fn machine_power_button(
     ui: &mut Ui,
     rect: Rect,
     scale: f32,
-    id: impl std::hash::Hash + std::fmt::Debug,
+    id: &str,
     enabled: bool,
 ) -> egui::Response {
     button(
@@ -197,6 +198,7 @@ pub(crate) fn machine_power_button(
         "ON",
         enabled,
     )
+    .midi_menu(ui, id)
 }
 
 impl App {
@@ -322,6 +324,7 @@ impl App {
                 label,
                 on,
             )
+            .midi_menu(ui, id)
             .clicked()
             {
                 self.panel.press(id, 0.0);
@@ -357,6 +360,7 @@ impl App {
             if song { "SONG" } else { "PATTERN" },
             song,
         )
+        .midi_menu(ui, "song-mode")
         .clicked()
         {
             self.panel.set_switch("transport.mode", u8::from(!song));
@@ -400,6 +404,7 @@ impl App {
             "COMP MASTER",
             comp,
         )
+        .midi_menu(ui, "master.comp")
         .clicked()
         {
             self.panel.press("master.comp", 0.0);
@@ -418,6 +423,7 @@ impl App {
                 &(i + 1).to_string(),
                 self.panel.rows[row].lit_button() == Some(i),
             )
+            .midi_menu(ui, &id)
             .clicked()
             {
                 self.panel.press(&id, 0.0);
@@ -433,6 +439,7 @@ impl App {
                 name,
                 self.panel.rows[row].bank as usize == i,
             )
+            .midi_menu(ui, &id)
             .clicked()
             {
                 self.panel.press(&id, 0.0);
@@ -471,6 +478,7 @@ impl App {
             "SWING",
             self.panel.toggle_on(&id),
         )
+        .midi_menu(ui, &id)
         .clicked()
         {
             self.panel.press(&id, 0.0);
@@ -499,6 +507,7 @@ impl App {
                 if wave == 0 { "SAW" } else { "SQUARE" },
                 false,
             )
+            .midi_menu(ui, &id)
             .clicked()
             {
                 self.panel.set_switch(&id, u8::from(wave == 0));
@@ -589,7 +598,7 @@ impl App {
                 ui.label(format!("STEP {:02}", step + 1));
                 let mut pitch = note.note.min(12);
                 if ui
-                    .add(egui::Slider::new(&mut pitch, 0..=12).text("Note"))
+                    .add(crate::midi::slider(ui, &mut pitch, 0..=12).text("Note"))
                     .changed()
                 {
                     self.panel.synth[row].edit = step as u8;
@@ -662,6 +671,7 @@ impl App {
                     label,
                     original,
                 )
+                .midi_menu(ui, &id)
                 .clicked()
                 {
                     self.panel.set_switch(&id, u8::from(!original));
@@ -677,6 +687,7 @@ impl App {
                     "FLAM",
                     on,
                 )
+                .midi_menu(ui, "tr909.flam_button")
                 .clicked()
                 {
                     self.panel.press("tr909.flam_button", 0.0);
@@ -753,6 +764,39 @@ impl App {
     }
 
     fn rack_mixer(&mut self, ui: &mut Ui, rack: Rack, row: usize, y: f32) {
+        if row >= 2 {
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(rack.rect(858.0, y + 129.0, 176.0, 23.0))
+                    .id_salt(("drum-trim", row)),
+                |ui| {
+                    let response = ui
+                        .add(
+                            crate::midi::drag_value(
+                                ui,
+                                &mut self.studio.settings.drum_gain_db[row - 2],
+                            )
+                            .range(-12.0..=12.0)
+                            .speed(0.1)
+                            .fixed_decimals(1)
+                            .prefix("TRIM ")
+                            .suffix(" dB"),
+                        )
+                        .midi_menu(
+                            ui,
+                            if row == 2 {
+                                "studio.trim808"
+                            } else {
+                                "studio.trim909"
+                            },
+                        );
+                    if response.changed() {
+                        self.studio.changed();
+                        self.doc.modified = true;
+                    }
+                },
+            );
+        }
         ui.painter().line_segment(
             [
                 rack.rect(846.0, y + 10.0, 0.0, 0.0).min,
@@ -767,7 +811,7 @@ impl App {
             ui,
             rack.rect(991.0, y + 9.0, 42.0, 19.0),
             rack.scale,
-            (row, "mute"),
+            &format!("{mixer}.mute"),
             mute,
         )
         .clicked()
@@ -823,6 +867,14 @@ impl App {
                 name,
                 on,
             )
+            .midi_menu(
+                ui,
+                &if i == 3 {
+                    format!("studio.send{}", row + 1)
+                } else {
+                    id.clone()
+                },
+            )
             .clicked()
             {
                 if i == 3 {
@@ -837,9 +889,11 @@ impl App {
     }
 
     fn rack_knob(&mut self, ui: &mut Ui, rack: Rack, id: &str, label: &str, rect: Rect) {
-        let response = ui.interact(rect, egui::Id::unique(("graphite-knob", id)), Sense::drag());
+        let response = ui
+            .interact(rect, egui::Id::unique(("graphite-knob", id)), Sense::drag())
+            .midi_menu(ui, id);
         let mut value = self.panel.knob(id);
-        if response.dragged() {
+        if response.dragged_by(egui::PointerButton::Primary) {
             self.panel.held = Some(id.to_string());
             let delta =
                 ui.input(|i| -i.pointer.delta().y * if i.modifiers.shift { 1.0 } else { 5.0 });
@@ -888,12 +942,14 @@ impl App {
     }
 
     fn rack_fader(&mut self, ui: &mut Ui, rack: Rack, id: &str, rect: Rect, vertical: bool) {
-        let response = ui.interact(
-            rect.expand(5.0 * rack.scale),
-            egui::Id::unique(("graphite-fader", id)),
-            Sense::click_and_drag(),
-        );
-        if (response.dragged() || response.clicked())
+        let response = ui
+            .interact(
+                rect.expand(5.0 * rack.scale),
+                egui::Id::unique(("graphite-fader", id)),
+                Sense::click_and_drag(),
+            )
+            .midi_menu(ui, id);
+        if (response.dragged_by(egui::PointerButton::Primary) || response.clicked())
             && let Some(pos) = response.interact_pointer_pos()
         {
             let fraction = if vertical {
@@ -960,7 +1016,8 @@ impl App {
                         "knob" => {
                             let mut v = self.panel.knob(&c.id);
                             if ui
-                                .add(egui::Slider::new(&mut v, 0..=1000).text(label))
+                                .add(crate::midi::slider(ui, &mut v, 0..=1000).text(label))
+                                .midi_menu(ui, &c.id)
                                 .changed()
                             {
                                 self.panel.set_knob(&c.id, v);
@@ -969,7 +1026,8 @@ impl App {
                         "fader" => {
                             let mut v = self.panel.fader(&c.id);
                             if ui
-                                .add(egui::Slider::new(&mut v, 0..=999).text(label))
+                                .add(crate::midi::slider(ui, &mut v, 0..=999).text(label))
+                                .midi_menu(ui, &c.id)
                                 .changed()
                             {
                                 self.panel.set_fader(&c.id, v);
@@ -977,7 +1035,7 @@ impl App {
                         }
                         "toggle" | "radio" => {
                             let mut on = self.panel.toggle_on(&c.id);
-                            if ui.checkbox(&mut on, label).changed() {
+                            if ui.checkbox(&mut on, label).midi_menu(ui, &c.id).changed() {
                                 self.panel.press(&c.id, 0.0);
                             }
                         }
@@ -988,6 +1046,7 @@ impl App {
                                 for value in 0..=1 {
                                     if ui
                                         .selectable_value(&mut v, value, value.to_string())
+                                        .midi_menu(ui, &c.id)
                                         .changed()
                                     {
                                         self.panel.set_switch(&c.id, value);

@@ -4,7 +4,7 @@
 //! is platform independent and uses the same Panel events as mouse edits. A dedicated worker
 //! handles MIDI Clock independently from GUI updates. Live instrument notes are not handled.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use eframe::egui::{self, Context};
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,10 @@ use crate::behavior;
 use crate::layout;
 use crate::model::Panel;
 
+mod context;
 pub mod preset;
 pub mod sync;
+pub(crate) use context::{MidiMenu, drag_value, slider};
 
 #[cfg(test)]
 mod tests;
@@ -109,6 +111,25 @@ fn is_primary(input: &u8) -> bool {
     *input == 0
 }
 
+/// Output parameter range, after device calibration. Physical CC still spans 0..127.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ValueRange {
+    pub max: u8,
+}
+
+impl Default for ValueRange {
+    fn default() -> Self {
+        Self { max: 127 }
+    }
+}
+
+impl ValueRange {
+    fn map(self, value: u8) -> u8 {
+        ((u16::from(value.min(127)) * u16::from(self.max.min(127)) + 63) / 127) as u8
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InputSettings {
@@ -132,6 +153,7 @@ pub struct Config {
     /// Raw continuous CC values up to this device-specific floor represent silence/zero.
     pub minimum_cc: u8,
     pub bindings: Vec<Binding>,
+    pub ranges: BTreeMap<String, ValueRange>,
 }
 
 impl Default for Config {
@@ -145,6 +167,7 @@ impl Default for Config {
             minimum_one: false,
             minimum_cc: 0,
             bindings: Vec::new(),
+            ranges: BTreeMap::new(),
         }
     }
 }
@@ -153,6 +176,7 @@ impl Config {
     /// Keep valid assignments only. A source and a target each have one owner; last wins.
     pub fn sanitize(&mut self) {
         self.clock.output_delay_ms = self.clock.output_delay_ms.min(500);
+        self.clock.input_offset_ms = self.clock.input_offset_ms.clamp(-500, 500);
         for port in [&mut self.clock.input, &mut self.clock.output] {
             if port.as_ref().is_some_and(|p| p.trim().is_empty()) {
                 *port = None;
@@ -170,6 +194,11 @@ impl Config {
                 self.assign(b);
             }
         }
+        self.ranges.retain(|id, range| {
+            range.max = range.max.min(127);
+            self.bindings.iter().any(|b| &b.target == id)
+                && matches!(kind(id), Some(Kind::Knob | Kind::Fader | Kind::Number))
+        });
         if self.port.as_ref().is_some_and(|p| p.trim().is_empty()) {
             self.port = None;
         }
@@ -184,6 +213,15 @@ impl Config {
     }
 
     pub fn assign(&mut self, b: Binding) {
+        self.ranges.retain(|id, _| {
+            id == &b.target
+                || !self.bindings.iter().any(|old| {
+                    &old.target == id
+                        && old.input == b.input
+                        && old.channel == b.channel
+                        && old.controller == b.controller
+                })
+        });
         self.bindings.retain(|old| {
             old.target != b.target
                 && (old.input != b.input
@@ -317,6 +355,10 @@ pub fn label(id: &str) -> String {
     format!("{section} / {}", parameter.replace('_', " "))
 }
 
+fn continuous(id: &str) -> bool {
+    matches!(kind(id), Some(Kind::Knob | Kind::Fader | Kind::Number))
+}
+
 #[derive(Default)]
 struct Pickup {
     previous: Option<u8>,
@@ -387,10 +429,11 @@ impl Router {
                 }
             }
             Kind::Knob | Kind::Fader | Kind::Number => {
-                let value = continuous_value(cc.value, config.minimum_cc_for(input));
+                let range = config.ranges.get(id).copied().unwrap_or_default();
+                let value = range.map(continuous_value(cc.value, config.minimum_cc_for(input)));
                 let current = normalized(panel, id, k);
                 let state = self.pickup.entry((input, b.target.clone())).or_default();
-                if !state.accepts(value, current, config.pickup) {
+                if !state.accepts(value, current.min(range.max.min(127)), config.pickup) {
                     return;
                 }
                 let p = behavior::knob_from_engine(i32::from(value));
@@ -626,6 +669,56 @@ impl Midi {
 
 impl App {
     pub(crate) fn midi_tick(&mut self, ctx: &Context) {
+        let mut changed = false;
+        for action in context::take(ctx) {
+            match action {
+                context::Action::Learn(id) => {
+                    self.midi.filter.clear();
+                    self.midi.selected = id;
+                    self.midi.begin_learn();
+                    if !self.settings.midi.enabled {
+                        self.settings.midi.enabled = true;
+                        self.midi.connect(&self.settings.midi);
+                        changed = true;
+                    }
+                    if self.midi.inputs.is_empty() {
+                        self.midi.open = true;
+                    }
+                }
+                context::Action::Remove(id) => {
+                    self.settings.midi.bindings.retain(|b| b.target != id);
+                    self.settings.midi.ranges.remove(&id);
+                    if self.midi.learning.as_ref() == Some(&id) {
+                        self.midi.learning = None;
+                    }
+                    changed = true;
+                }
+                context::Action::Range(id, range) => {
+                    if self.settings.midi.bindings.iter().any(|b| b.target == id) {
+                        self.settings.midi.ranges.insert(id, range);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if changed {
+            self.midi.router.reset();
+            self.save_midi();
+        }
+        context::snapshot(ctx, &self.settings.midi);
+        if let Some(id) = self.midi.learning.clone() {
+            egui::Window::new("MIDI Learn")
+                .id(egui::Id::unique("midi-learn-status"))
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.label(label(&id));
+                    ui.label("Move a knob or fader on your controller.");
+                    if ui.button("Cancel").clicked() {
+                        self.midi.learning = None;
+                    }
+                });
+        }
         if let Some(link) = &mut self.link {
             self.midi.clock.attach(link.player().take_midi_clock());
         }
@@ -742,6 +835,11 @@ impl App {
                             }
                         });
                     ui.small("External Start/Continue controls playback. Local STOP is an emergency stop.");
+                    if ui.add(egui::DragValue::new(&mut config.clock.input_offset_ms)
+                        .range(-500..=500).prefix("IN offset ").suffix(" ms")).changed() {
+                        changed = true; reconnect = true;
+                    }
+                    ui.small("Negative: advance Acid Recall. Positive: delay it. Applied gradually during playback.");
                 }
                 if config.clock.mode == sync::Mode::Master {
                     egui::ComboBox::from_id_salt("clock-out")
@@ -756,6 +854,10 @@ impl App {
                         });
                     if ui.add(egui::DragValue::new(&mut config.clock.output_delay_ms)
                         .range(0..=500).prefix("OUT delay ").suffix(" ms")).changed() {
+                        changed = true; reconnect = true;
+                    }
+                    if ui.button("Default OUT delay: 30 ms").clicked() {
+                        config.clock.output_delay_ms = 30;
                         changed = true; reconnect = true;
                     }
                     ui.small("Delay MIDI to match your audio interface latency. Receiver must use external sync.");
@@ -959,7 +1061,14 @@ impl App {
                                     b.channel,
                                     b.controller
                                 ));
-                                ui.label(label(&b.target));
+                                ui.label(label(&b.target)).midi_menu(ui, &b.target);
+                                if continuous(&b.target) {
+                                    let range = config.ranges.entry(b.target.clone()).or_default();
+                                    if ui.add(egui::DragValue::new(&mut range.max)
+                                        .range(0..=127).prefix("MAX ")).changed() {
+                                        changed = true;
+                                    }
+                                }
                                 if ui.small_button("Remove").clicked() {
                                     remove = Some(i);
                                 }
@@ -981,7 +1090,8 @@ impl App {
             self.midi.learning = None;
         }
         if let Some(i) = remove {
-            self.settings.midi.bindings.remove(i);
+            let binding = self.settings.midi.bindings.remove(i);
+            self.settings.midi.ranges.remove(&binding.target);
             self.midi.router.reset();
             changed = true;
         }
@@ -989,6 +1099,7 @@ impl App {
             self.midi.connect(&self.settings.midi);
         }
         if changed {
+            self.midi.router.reset();
             self.save_midi();
         }
         if import {

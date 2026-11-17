@@ -30,7 +30,7 @@ jobs:
       - name: Lint
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
-        run: cargo test --locked -p orb-ui --lib --test sidechain --test theme --test arpeggiator --test generator --test midi_preset --test midi --test midi_clock --test settings --test wired --test repaint --test menu
+        run: cargo test --locked -p orb-ui --lib --test sidechain --test theme --test arpeggiator --test generator --test midi_preset --test midi --test midi_caps --test midi_clock --test settings --test wired --test repaint --test menu
       - name: Engine and sidechain regression tests
         run: cargo test --locked -p orb-engine
       - name: Check default skin and render preview
@@ -135,6 +135,11 @@ jobs:
 
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
+
+          Right-click assignable controls for MIDI LEARN, assignment removal and a custom
+          MAX from 0 to 127. New Clock OUT settings default to 30 ms; Clock IN has a signed
+          phase offset. New Studio sessions balance the TR-808 with a smoothed +6 dB trim;
+          both drum trims are adjustable and saved in portable projects.
 
           This rolling preview is updated after successful Studio Windows builds.
           Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}

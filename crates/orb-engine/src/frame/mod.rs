@@ -991,6 +991,9 @@ impl Frame {
         let bus = &mut self.bus;
         for (c, ch) in self.state.channels.iter_mut().enumerate() {
             self.devices.channels[c].process(bus, &ctx);
+            if let Some(studio) = &mut self.studio {
+                studio.trim_drum(c, bus);
+            }
             // the word the audio slot leaves at its esp0 - 0x1C (the 303s leave the slot as it
             // was); the distortion (0x10010A50: no local there, calls only below its esp) leaves
             // it for the PCF after it

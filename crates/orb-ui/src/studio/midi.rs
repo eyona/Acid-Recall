@@ -15,6 +15,8 @@ pub fn controls() -> Vec<(String, String)> {
         ("width", "Stereo width"),
         ("low_cut", "Low cut"),
         ("high_cut", "High cut"),
+        ("trim808", "TR-808 gain trim"),
+        ("trim909", "TR-909 gain trim"),
     ] {
         out.push((format!("studio.{name}"), format!("SPACE / {label}")));
     }
@@ -185,6 +187,8 @@ fn value(settings: &Settings, id: &str) -> f64 {
         "studio.width" => settings.width / 2.0,
         "studio.low_cut" => (settings.low_cut - 20.0) / 1980.0,
         "studio.high_cut" => (settings.high_cut - 2000.0) / 18000.0,
+        "studio.trim808" => (settings.drum_gain_db[0] + 12.0) / 24.0,
+        "studio.trim909" => (settings.drum_gain_db[1] + 12.0) / 24.0,
         "sampler.on" => f64::from(u8::from(settings.sampler_bus.enabled)),
         "sampler.level" => settings.sampler_bus.gain / 2.0,
         "sampler.pan" => (settings.sampler_bus.pan + 1.0) / 2.0,
@@ -268,6 +272,8 @@ impl App {
                 "studio.width" => s.width = v * 2.0,
                 "studio.low_cut" => s.low_cut = 20.0 + v * 1980.0,
                 "studio.high_cut" => s.high_cut = 2000.0 + v * 18000.0,
+                "studio.trim808" => s.drum_gain_db[0] = -12.0 + v * 24.0,
+                "studio.trim909" => s.drum_gain_db[1] = -12.0 + v * 24.0,
                 "sampler.on" => s.sampler_bus.enabled = raw >= 64,
                 "sampler.level" => s.sampler_bus.gain = v * 2.0,
                 "sampler.pan" => s.sampler_bus.pan = v * 2.0 - 1.0,
@@ -509,7 +515,7 @@ mod tests {
 
     #[test]
     fn all_studio_controls_are_registered_with_correct_midi_behavior() {
-        assert_eq!(controls().len(), 231);
+        assert_eq!(controls().len(), 233);
         for (id, _) in controls() {
             assert!(kind(&id).is_some(), "{id}");
             assert!(Panel::new().value(&id).is_some(), "{id}");

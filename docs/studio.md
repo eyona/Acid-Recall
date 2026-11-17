@@ -266,8 +266,33 @@ notes. All four original machines and the sampler share the transport. Enable **
 on samples that should follow tempo while preserving pitch.
 
 Select the corresponding MIDI port. The OUT delay (0–500 ms) can compensate audio output
-latency. Clock loss in slave mode stops playback; a new external Start or Continue resumes
+latency; new configurations default to 30 ms. A signed **IN offset** (−500 to +500 ms,
+default 0) advances playback with negative values and delays it with positive values.
+This converges gradually during playback and cannot predict the first external Start.
+Clock loss in slave mode stops playback; a new external Start or Continue resumes
 it. MIDI Learn and controller assignments remain available. IN and OUT are exclusive modes.
 
 See [MIDI Clock setup and limits](midi-clock.md) for hardware connections and transport
 behavior. This preview needs real-hardware timing feedback from testers.
+
+## MIDI Learn on the rack
+
+Right-click an assignable control, choose **MIDI LEARN...**, then move your physical
+controller. Right-click again to remove the assignment or choose its **MAX** (0–127).
+Each continuous control has its own freely chosen maximum: a fader fully up reaches that
+value and fully down reaches zero. MAX defaults to 127; no per-assignment MIN is needed.
+Limits save with routing presets and affect MIDI only. See [MIDI controller setup](midi-controller.md).
+
+## TR-808 / TR-909 balance
+
+Each drum mixer has a **TRIM** control from −12 to +12 dB, also assignable through MIDI
+Learn. New Studio sessions start at **+6 dB for the TR-808** and **0 dB for the TR-909**.
+The standard kit's isolated kick measured about 6.7 dB quieter on the 808 with equal
+controls; the correction brings that gap below 1.5 dB in the regression render. Different
+voices, patterns and imported kits still have different dynamics, so adjust TRIM to taste
+and leave headroom at the master when stacking loud sounds.
+
+Trim changes are smoothed and feed the instrument's inserts, meters, delay and reverb.
+They save in portable `.orb338` projects. Older Studio projects without trim metadata
+load at **0 dB on both drums**, preserving their previous mix. Legacy engine renders
+without Studio retain their original arithmetic and output.

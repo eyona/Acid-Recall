@@ -20,7 +20,7 @@ pub enum Mode {
     Slave,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub mode: Mode,
@@ -28,6 +28,20 @@ pub struct Config {
     pub output: Option<String>,
     /// Delay outgoing clock/transport to compensate the audio interface's output latency.
     pub output_delay_ms: u16,
+    /// Phase correction: negative advances playback, positive delays it.
+    pub input_offset_ms: i16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Off,
+            input: None,
+            output: None,
+            output_delay_ms: 30,
+            input_offset_ms: 0,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -118,6 +132,10 @@ impl Runtime {
         shared.lost.store(false, Ordering::Release);
         shared.overflow.store(0, Ordering::Relaxed);
         shared.bpm.store(0, Ordering::Relaxed);
+        shared.input_offset_ms.store(
+            i32::from(config.input_offset_ms.clamp(-500, 500)),
+            Ordering::Release,
+        );
         // Reset the previous source before opening a new one; never resume from stale transport.
         shared.write(orb_player::clock::InputFrame {
             period: 20_833_333,

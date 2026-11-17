@@ -6,6 +6,7 @@ use orb_player::Command;
 
 use super::IR_NAMES;
 use crate::app::{App, View};
+use crate::midi::MidiMenu;
 
 const ACCENT: Color32 = Color32::from_rgb(190, 215, 126);
 const CARD: Color32 = Color32::from_rgb(30, 31, 34);
@@ -16,12 +17,13 @@ fn style(ui: &mut Ui) {
     ui.visuals_mut().selection.stroke = Stroke::new(1.0, ACCENT);
 }
 
-fn slider(ui: &mut Ui, value: &mut f64, lo: f64, hi: f64, label: &str) {
+fn slider(ui: &mut Ui, value: &mut f64, lo: f64, hi: f64, label: &str, id: &str) {
     ui.add(
-        egui::Slider::new(value, lo..=hi)
+        crate::midi::slider(ui, value, lo..=hi)
             .logarithmic(lo > 0.0 && hi / lo >= 50.0)
             .text(label),
-    );
+    )
+    .midi_menu(ui, id);
 }
 
 impl App {
@@ -183,7 +185,7 @@ impl App {
                                 }
                             });
                         ui.add(
-                            egui::DragValue::new(&mut self.studio.decay)
+                            crate::midi::drag_value(ui, &mut self.studio.decay)
                                 .range(0.1..=6.0)
                                 .speed(0.05)
                                 .suffix(" s"),
@@ -203,21 +205,37 @@ impl App {
                 ui.separator();
                 ui.columns(2, |columns| {
                     let s = &mut self.studio.settings;
-                    slider(&mut columns[0], &mut s.return_gain, 0.0, 1.0, "Return");
+                    slider(
+                        &mut columns[0],
+                        &mut s.return_gain,
+                        0.0,
+                        1.0,
+                        "Return",
+                        "studio.return",
+                    );
                     slider(
                         &mut columns[0],
                         &mut s.predelay_ms,
                         0.0,
                         200.0,
                         "Pre-delay / ms",
+                        "studio.predelay",
                     );
-                    slider(&mut columns[0], &mut s.width, 0.0, 2.0, "Stereo width");
+                    slider(
+                        &mut columns[0],
+                        &mut s.width,
+                        0.0,
+                        2.0,
+                        "Stereo width",
+                        "studio.width",
+                    );
                     slider(
                         &mut columns[1],
                         &mut s.low_cut,
                         20.0,
                         2000.0,
                         "Low cut / Hz",
+                        "studio.low_cut",
                     );
                     slider(
                         &mut columns[1],
@@ -225,6 +243,7 @@ impl App {
                         2000.0,
                         20000.0,
                         "High cut / Hz",
+                        "studio.high_cut",
                     );
                 });
                 ui.separator();
@@ -233,7 +252,14 @@ impl App {
                     .iter()
                     .enumerate()
                 {
-                    slider(ui, &mut self.studio.settings.sends[i], 0.0, 1.0, name);
+                    slider(
+                        ui,
+                        &mut self.studio.settings.sends[i],
+                        0.0,
+                        1.0,
+                        name,
+                        &format!("studio.send{}", i + 1),
+                    );
                 }
                 slider(
                     ui,
@@ -241,6 +267,7 @@ impl App {
                     0.0,
                     1.0,
                     "Sampler / global send",
+                    "sampler.send",
                 );
                 ui.small(
                     "Sampler lanes have individual sends. Turning a send down \
@@ -323,8 +350,10 @@ impl App {
                                     self.studio.selected = i;
                                 }
                                 let lane = &mut self.studio.settings.lanes[i];
-                                ui.checkbox(&mut lane.muted, "");
-                                ui.checkbox(&mut lane.solo, "");
+                                ui.checkbox(&mut lane.muted, "")
+                                    .midi_menu(ui, &format!("sampler{}.mute", i + 1));
+                                ui.checkbox(&mut lane.solo, "")
+                                    .midi_menu(ui, &format!("sampler{}.solo", i + 1));
                                 if ui.add_enabled(!busy, egui::Button::new("Load")).clicked() {
                                     load = Some(i);
                                 }
@@ -358,8 +387,12 @@ impl App {
                                     }
                                     response.context_menu(|ui| {
                                         ui.add(
-                                            egui::Slider::new(&mut lane.steps[index], 0..=127)
-                                                .text("Velocity"),
+                                            crate::midi::slider(
+                                                ui,
+                                                &mut lane.steps[index],
+                                                0..=127,
+                                            )
+                                            .text("Velocity"),
                                         );
                                     });
                                 }
@@ -388,7 +421,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let lane = &mut self.studio.settings.lanes[self.studio.selected];
                     ui.add(
-                        egui::DragValue::new(&mut lane.bars)
+                        crate::midi::drag_value(ui, &mut lane.bars)
                             .range(1..=64)
                             .prefix("Length ")
                             .suffix(" bars"),
@@ -469,7 +502,7 @@ impl App {
                             let entry = (at - lane.start).abs() <= (at - lane.end).abs();
                             ui.data_mut(|d| d.insert_temp(id, entry));
                         }
-                        if response.dragged() || response.clicked() {
+                        if response.dragged_by(egui::PointerButton::Primary) || response.clicked() {
                             let entry = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(true);
                             trim_at(lane, entry, at, minimum);
                         }
@@ -484,7 +517,7 @@ impl App {
                     ui.horizontal(|ui| {
                         if ui
                             .add(
-                                egui::DragValue::new(&mut entry)
+                                crate::midi::drag_value(ui, &mut entry)
                                     .range(0.0..=duration)
                                     .speed(0.001)
                                     .fixed_decimals(3)
@@ -497,7 +530,7 @@ impl App {
                         }
                         if ui
                             .add(
-                                egui::DragValue::new(&mut exit)
+                                crate::midi::drag_value(ui, &mut exit)
                                     .range(0.0..=duration)
                                     .speed(0.001)
                                     .fixed_decimals(3)
@@ -526,14 +559,17 @@ impl App {
                         (Mode::Gate, "Gate"),
                         (Mode::Loop, "Loop"),
                     ] {
-                        ui.selectable_value(&mut lane.mode, mode, label);
+                        ui.selectable_value(&mut lane.mode, mode, label)
+                            .midi_menu(ui, &format!("sampler{}.mode", selected + 1));
                     }
-                    ui.checkbox(&mut lane.reverse, "Reverse");
+                    ui.checkbox(&mut lane.reverse, "Reverse")
+                        .midi_menu(ui, &format!("sampler{}.reverse", selected + 1));
                     ui.add(
-                        egui::DragValue::new(&mut lane.choke)
+                        crate::midi::drag_value(ui, &mut lane.choke)
                             .range(0..=8)
                             .prefix("Choke "),
-                    );
+                    )
+                    .midi_menu(ui, &format!("sampler{}.choke", selected + 1));
                 });
                 ui.small(match lane.mode {
                     Mode::OneShot => {
@@ -550,16 +586,43 @@ impl App {
                     }
                 });
                 ui.columns(3, |columns| {
-                    slider(&mut columns[0], &mut lane.gain, 0.0, 2.0, "Level");
-                    slider(&mut columns[0], &mut lane.pan, -1.0, 1.0, "Pan");
-                    slider(&mut columns[0], &mut lane.send, 0.0, 1.0, "Reverb send");
-                    columns[1].add(egui::Slider::new(&mut lane.pitch, -24..=24).text("Pitch / st"));
+                    slider(
+                        &mut columns[0],
+                        &mut lane.gain,
+                        0.0,
+                        2.0,
+                        "Level",
+                        &format!("sampler{}.{}", selected + 1, "level"),
+                    );
+                    slider(
+                        &mut columns[0],
+                        &mut lane.pan,
+                        -1.0,
+                        1.0,
+                        "Pan",
+                        &format!("sampler{}.{}", selected + 1, "pan"),
+                    );
+                    slider(
+                        &mut columns[0],
+                        &mut lane.send,
+                        0.0,
+                        1.0,
+                        "Reverb send",
+                        &format!("sampler{}.{}", selected + 1, "send"),
+                    );
+                    columns[1]
+                        .add(
+                            crate::midi::slider(&columns[1], &mut lane.pitch, -24..=24)
+                                .text("Pitch / st"),
+                        )
+                        .midi_menu(&mut columns[1], &format!("sampler{}.pitch", selected + 1));
                     slider(
                         &mut columns[1],
                         &mut lane.attack_ms,
                         0.1,
                         2000.0,
                         "Attack / ms",
+                        &format!("sampler{}.{}", selected + 1, "attack"),
                     );
                     slider(
                         &mut columns[1],
@@ -567,23 +630,39 @@ impl App {
                         1.0,
                         3000.0,
                         "Release / ms",
+                        &format!("sampler{}.{}", selected + 1, "release"),
                     );
-                    slider(&mut columns[2], &mut lane.start, 0.0, 1.0 - 1e-9, "Start");
+                    slider(
+                        &mut columns[2],
+                        &mut lane.start,
+                        0.0,
+                        1.0 - 1e-9,
+                        "Start",
+                        &format!("sampler{}.{}", selected + 1, "start"),
+                    );
                     slider(
                         &mut columns[2],
                         &mut lane.end,
                         lane.start + 1e-9,
                         1.0,
                         "End",
+                        &format!("sampler{}.{}", selected + 1, "end"),
                     );
-                    slider(&mut columns[2], &mut lane.gate, 0.01, 16.0, "Gate / steps");
+                    slider(
+                        &mut columns[2],
+                        &mut lane.gate,
+                        0.01,
+                        16.0,
+                        "Gate / steps",
+                        &format!("sampler{}.{}", selected + 1, "gate"),
+                    );
                 });
                 ui.separator();
                 let frames = self.studio.waves[selected]
                     .as_ref()
                     .map(|wave| wave.frames.len());
-                super::rack::warp_controls(ui, lane, frames);
-                super::rack::gater_controls(ui, lane);
+                super::rack::warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1));
+                super::rack::gater_controls(ui, lane, &format!("sampler{}", selected + 1));
                 ui.columns(3, |columns| {
                     slider(
                         &mut columns[0],
@@ -591,6 +670,7 @@ impl App {
                         0.0,
                         1.0,
                         "Gater depth",
+                        &format!("sampler{}.{}", selected + 1, "gater_depth"),
                     );
                     slider(
                         &mut columns[1],
@@ -598,6 +678,7 @@ impl App {
                         0.1,
                         100.0,
                         "Open / ms",
+                        &format!("sampler{}.{}", selected + 1, "gater_attack_ms"),
                     );
                     slider(
                         &mut columns[2],
@@ -605,6 +686,7 @@ impl App {
                         1.0,
                         500.0,
                         "Close / ms",
+                        &format!("sampler{}.{}", selected + 1, "gater_release_ms"),
                     );
                 });
                 ui.small(
@@ -662,7 +744,8 @@ impl App {
                         "knob" => {
                             let mut value = self.panel.knob(&control.id);
                             if ui
-                                .add(egui::Slider::new(&mut value, 0..=1000).text(label))
+                                .add(crate::midi::slider(ui, &mut value, 0..=1000).text(label))
+                                .midi_menu(ui, &control.id)
                                 .changed()
                             {
                                 self.panel.set_knob(&control.id, value);
@@ -671,7 +754,8 @@ impl App {
                         "fader" => {
                             let mut value = self.panel.fader(&control.id);
                             if ui
-                                .add(egui::Slider::new(&mut value, 0..=999).text(label))
+                                .add(crate::midi::slider(ui, &mut value, 0..=999).text(label))
+                                .midi_menu(ui, &control.id)
                                 .changed()
                             {
                                 self.panel.set_fader(&control.id, value);
@@ -687,7 +771,11 @@ impl App {
                                     [(0, "Straight"), (1, "Triplet")]
                                 };
                                 for (v, text) in options {
-                                    if ui.selectable_value(&mut value, v, text).changed() {
+                                    if ui
+                                        .selectable_value(&mut value, v, text)
+                                        .midi_menu(ui, &control.id)
+                                        .changed()
+                                    {
                                         self.panel.set_switch(&control.id, value);
                                     }
                                 }
@@ -710,7 +798,11 @@ impl App {
                         }
                         "toggle" => {
                             let mut on = self.panel.toggle_on(&control.id);
-                            if ui.checkbox(&mut on, label).changed() {
+                            if ui
+                                .checkbox(&mut on, label)
+                                .midi_menu(ui, &control.id)
+                                .changed()
+                            {
                                 self.panel.press(&control.id, 0.0);
                             }
                         }

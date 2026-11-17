@@ -5,6 +5,34 @@ use orb_player::{Command, Player};
 use std::sync::atomic::Ordering;
 
 #[test]
+fn input_offset_adjusts_phase_without_seeking_past_the_first_downbeat() {
+    for (offset, faster) in [(-30, true), (30, false)] {
+        let (mut player, mut audio) = Player::new(common::tables(), None);
+        let connection = player.take_midi_clock().unwrap();
+        let shared = &connection.shared;
+        shared.mode.store(SLAVE, Ordering::Release);
+        shared.input_offset_ms.store(offset, Ordering::Release);
+        shared.write(InputFrame {
+            at: shared.now(),
+            tick: 0,
+            period: 20_833_333,
+            playing: true,
+            generation: 1,
+        });
+        audio.render_i16(&mut [0; 128]);
+        let snapshot = player.snapshot();
+        assert!(snapshot.playing);
+        assert!(snapshot.tick <= 8, "offset must not skip the downbeat");
+        let tempo = audio.current_mut().frame.seq.globals.tempo;
+        if faster {
+            assert!(tempo > 120_000);
+        } else {
+            assert!(tempo < 120_000);
+        }
+    }
+}
+
+#[test]
 fn external_transport_reaches_engine_and_local_stop_requires_a_new_external_start() {
     let (mut player, mut audio) = Player::new(common::tables(), None);
     let connection = player.take_midi_clock().unwrap();

@@ -6,6 +6,7 @@ use orb_player::Command;
 use serde::{Deserialize, Serialize};
 
 use crate::app::{App, View};
+use crate::midi::MidiMenu;
 use crate::model::Event;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,14 +136,19 @@ impl App {
                 let s = &mut self.settings.sidechain;
                 ui.horizontal(|ui| {
                     let on = s.enabled && !s.bypass[row];
-                    if ui.selectable_label(on, "SIDECHAIN").clicked() {
+                    if ui
+                        .selectable_label(on, "SIDECHAIN")
+                        .midi_menu(ui, &format!("duck{}.on", row + 1))
+                        .clicked()
+                    {
                         s.set_tb_enabled(row, !on);
                     }
                     ui.add(
-                        egui::DragValue::new(&mut s.depth[row])
+                        crate::midi::drag_value(ui, &mut s.depth[row])
                             .range(0..=100)
                             .suffix("%"),
                     )
+                    .midi_menu(ui, &format!("duck{}.depth", row + 1))
                     .on_hover_text("Depth for this TB only; bypass retains this value");
                     if ui.small_button("...").clicked() {
                         self.sidechain.open = true;
@@ -159,10 +165,11 @@ impl App {
                         });
                     instrument_selector(ui, s);
                     ui.add(
-                        egui::DragValue::new(&mut s.release_ms)
+                        crate::midi::drag_value(ui, &mut s.release_ms)
                             .range(20..=1000)
                             .suffix("ms"),
                     )
+                    .midi_menu(ui, "duck.release")
                     .on_hover_text(
                         "Trigger voice and return time are shared by both TBs and sampler",
                     );
@@ -301,7 +308,7 @@ impl App {
                     }
                     changed |= ui
                         .add(
-                            egui::Slider::new(&mut s.depth[row], 0..=100)
+                            crate::midi::slider(ui, &mut s.depth[row], 0..=100)
                                 .text(format!("{label} depth"))
                                 .suffix(" %"),
                         )
@@ -313,7 +320,7 @@ impl App {
                 }
                 changed |= ui
                     .add(
-                        egui::Slider::new(&mut s.release_ms, 20..=1000)
+                        crate::midi::slider(ui, &mut s.release_ms, 20..=1000)
                             .text("Return")
                             .suffix(" ms"),
                     )

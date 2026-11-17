@@ -1,7 +1,7 @@
 # MIDI Clock IN / OUT — ACID RECALL (Windows)
 
 Open MIDI, then **MIDI CLOCK / SYNC**. Clock is off by default. Preferences remember the
-mode, ports and OUT delay locally; importing a controller routing file never changes them.
+mode, ports, OUT delay and IN offset locally; importing a controller routing file never changes them.
 Clock is a system message, independent from MIDI channels and CC assignments.
 
 ## MASTER / OUT: ACID RECALL leads the hardware
@@ -13,9 +13,14 @@ Clock is a system message, independent from MIDI channels and CC assignments.
    Starting from a nonzero location sends Song Position Pointer and Continue; the receiver
    must support these messages to resume at that position. Song Position Pointer has
    sixteenth-note resolution. Clock runs during playback, not while stopped.
-5. Adjust **OUT delay** (0–500 ms) if the drum machine sounds ahead of the software. This delays
+5. **OUT delay defaults to 30 ms** (adjustable from 0–500 ms). Adjust it if the drum machine sounds
+   ahead of the software. This delays
    outgoing Clock and transport to compensate your audio interface's audible output latency.
    Reconfiguring the connection sends Stop; restart playback afterwards.
+
+Saved delay values remain unchanged, including an explicitly saved 0 ms. Use
+**Default OUT delay: 30 ms** to apply the new starting point to an existing setup. The best
+value depends on the audio interface, buffer size and connected machine; 30 ms is a starting point.
 
 Timing comes from audio frame counts, retaining fractional clock phase across blocks and
 tempo changes. A separate worker schedules timestamped events and calls WinMM. No MIDI
@@ -33,6 +38,15 @@ the player renders 64-frame blocks; OFF retains its original 1024-frame calls.
    20–400 BPM). A bounded phase correction follows the clock without seeking on every pulse.
    Large discontinuities re-locate. All four machines and the sampler share this transport;
    enable TIME WARP on samples that should follow tempo without transposition.
+
+6. **IN offset** is a manual phase adjustment from **−500 to +500 ms**, default **0 ms**.
+   A **negative** value advances ACID RECALL relative to the incoming clock (try −30 ms if
+   the software is late); a **positive** value delays it. The adjustment converges gradually
+   during playback rather than seeking or retriggering notes on each pulse. The master still
+   controls Start, Stop and position. An offset cannot predict an external Start before it
+   arrives, so the first downbeat remains subject to the PC's audio buffering. After changing
+   sync settings, restart the external transport. This is manual calibration, not automatic
+   measurement or removal of the audio driver's latency.
 
 In slave mode local Play, tempo and locate changes do not override the external master.
 Local **Stop** is an emergency stop; the next external Start/Continue releases it. MIDI Stop

@@ -1,7 +1,7 @@
 //! MIDI transport bridge. Audio only accesses bounded queues and atomics; drivers live elsewhere.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 pub const OFF: u8 = 0;
@@ -24,6 +24,7 @@ pub struct Shared {
     pub lost: AtomicBool,
     pub overflow: AtomicU64,
     pub bpm: AtomicU32,
+    pub input_offset_ms: AtomicI32,
     pub audio_at: AtomicU64,
     revision: AtomicU64,
     at: AtomicU64,
@@ -42,6 +43,7 @@ impl Default for Shared {
             lost: AtomicBool::new(false),
             overflow: AtomicU64::new(0),
             bpm: AtomicU32::new(0),
+            input_offset_ms: AtomicI32::new(0),
             audio_at: AtomicU64::new(0),
             revision: AtomicU64::new(0),
             at: AtomicU64::new(0),

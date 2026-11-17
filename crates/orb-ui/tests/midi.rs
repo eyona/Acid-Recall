@@ -18,6 +18,7 @@ fn config(target: &str, pickup: bool) -> Config {
         minimum_one: false,
         minimum_cc: 0,
         additional_inputs: Vec::new(),
+        ranges: Default::default(),
         bindings: vec![Binding {
             input: 0,
             channel: 1,

@@ -793,9 +793,15 @@ impl Audio {
         if let Some(length) = loop_length {
             error = (error + length * 0.5).rem_euclid(length) - length * 0.5;
         }
+        let offset = self
+            .midi_clock
+            .shared
+            .input_offset_ms
+            .load(Ordering::Acquire);
+        let offset_ticks = f64::from(offset.clamp(-500, 500)) * 1_000_000.0 * 8.0 / period as f64;
         if self.midi_clock.generation != input.generation
             || !self.current.playing()
-            || error.abs() > 96.0
+            || error.abs() > 96.0 + offset_ticks.abs()
         {
             if let Some(new) = self.pending.take() {
                 self.switch(new);
@@ -807,6 +813,12 @@ impl Audio {
             error = 0.0;
         }
         // A bounded phase-locked correction avoids seeking/retriggering on every clock pulse.
+        // Apply calibration to phase only. Start/locate and discontinuity detection retain
+        // the master's true position, so an offset cannot skip the first downbeat or cause seeks.
+        error -= offset_ticks;
+        if let Some(length) = loop_length {
+            error = (error + length * 0.5).rem_euclid(length) - length * 0.5;
+        }
         let bpm = 2_500_000_000_000.0 / period as f64;
         let correction = (error / 192.0 * 0.5).clamp(-0.05, 0.05);
         self.current

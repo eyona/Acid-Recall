@@ -6,6 +6,7 @@ use orb_player::Command;
 
 use super::editors::{trim_at, waveform};
 use crate::app::App;
+use crate::midi::MidiMenu;
 
 const ACID: Color32 = Color32::from_rgb(190, 215, 126);
 const FACE: Color32 = Color32::from_rgb(29, 31, 32);
@@ -35,13 +36,20 @@ fn surface(ui: &mut Ui, rect: Rect, id: &str, draw: impl FnOnce(&mut Ui)) {
     );
 }
 
-fn float_knob(ui: &mut Ui, value: &mut f64, range: std::ops::RangeInclusive<f64>, label: &str) {
+fn float_knob(
+    ui: &mut Ui,
+    value: &mut f64,
+    range: std::ops::RangeInclusive<f64>,
+    label: &str,
+    id: &str,
+) {
     let (lo, hi) = (*range.start(), *range.end());
     ui.vertical(|ui| {
         let width = (ui.available_width() / 3.0).clamp(32.0, 52.0);
         let (rect, response) =
             ui.allocate_exact_size(Vec2::new(width, width + 34.0), Sense::click_and_drag());
-        if response.dragged() {
+        let response = response.midi_menu(ui, id);
+        if response.dragged_by(egui::PointerButton::Primary) {
             let delta = ui.input(|i| -i.pointer.delta().y);
             let fine = ui.input(|i| if i.modifiers.shift { 0.1 } else { 1.0 });
             *value = (*value + f64::from(delta * fine) * (hi - lo) / 160.0).clamp(lo, hi);
@@ -77,10 +85,14 @@ fn float_knob(ui: &mut Ui, value: &mut f64, range: std::ops::RangeInclusive<f64>
     });
 }
 
-pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane) {
+pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
     ui.horizontal_wrapped(|ui| {
         let mut on = lane.gater_source != 0;
-        if ui.checkbox(&mut on, "GATER").changed() {
+        if ui
+            .checkbox(&mut on, "GATER")
+            .midi_menu(ui, &format!("{prefix}.gater_source"))
+            .changed()
+        {
             lane.gater_source = if on { 4 } else { 0 };
         }
         egui::ComboBox::from_id_salt("gater-source")
@@ -92,8 +104,10 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane) {
                 _ => "TR-909",
             })
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut lane.gater_source, 3, "TR-808");
-                ui.selectable_value(&mut lane.gater_source, 4, "TR-909");
+                ui.selectable_value(&mut lane.gater_source, 3, "TR-808")
+                    .midi_menu(ui, &format!("{prefix}.gater_source"));
+                ui.selectable_value(&mut lane.gater_source, 4, "TR-909")
+                    .midi_menu(ui, &format!("{prefix}.gater_source"));
             });
         let instruments = if lane.gater_source == 3 {
             [
@@ -110,13 +124,14 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane) {
             .selected_text(instruments[selected])
             .show_ui(ui, |ui| {
                 for (i, label) in instruments.iter().enumerate() {
-                    ui.selectable_value(&mut lane.gater_instrument, i as u8 + 1, *label);
+                    ui.selectable_value(&mut lane.gater_instrument, i as u8 + 1, *label)
+                        .midi_menu(ui, &format!("{prefix}.gater_instrument"));
                 }
             });
         let mut depth = lane.gater_depth * 100.0;
         if ui
             .add(
-                egui::DragValue::new(&mut depth)
+                crate::midi::drag_value(ui, &mut depth)
                     .range(0.0..=100.0)
                     .prefix("Depth ")
                     .suffix("%"),
@@ -156,41 +171,49 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane) {
                     (8.0, "1/2"),
                     (16.0, "1 bar"),
                 ] {
-                    ui.selectable_value(&mut lane.gater_hold, value, text);
+                    ui.selectable_value(&mut lane.gater_hold, value, text)
+                        .midi_menu(ui, &format!("{prefix}.gater_hold"));
                 }
             });
         ui.add(
-            egui::DragValue::new(&mut lane.gater_release_ms)
+            crate::midi::drag_value(ui, &mut lane.gater_release_ms)
                 .range(1.0..=500.0)
                 .prefix("Smooth ")
                 .suffix("ms"),
-        );
-        ui.checkbox(&mut lane.sidechain, "SIDECHAIN").on_hover_text(
-            "Sampler ducking follows the selected sidechain drum voice, source and release",
-        );
+        )
+        .midi_menu(ui, &format!("{prefix}.gater_release_ms"));
+        ui.checkbox(&mut lane.sidechain, "SIDECHAIN")
+            .midi_menu(ui, &format!("{prefix}.sidechain"))
+            .on_hover_text(
+                "Sampler ducking follows the selected sidechain drum voice, source and release",
+            );
     });
 }
 
-pub(super) fn warp_controls(ui: &mut Ui, lane: &mut Lane, frames: Option<usize>) {
+pub(super) fn warp_controls(ui: &mut Ui, lane: &mut Lane, frames: Option<usize>, prefix: &str) {
     ui.horizontal_wrapped(|ui| {
         ui.checkbox(&mut lane.warp, "TIME WARP")
+            .midi_menu(ui, &format!("{prefix}.warp"))
             .on_hover_text("Follow the song tempo without changing the sample pitch");
         ui.add(
-            egui::DragValue::new(&mut lane.warp_bpm)
+            crate::midi::drag_value(ui, &mut lane.warp_bpm)
                 .range(20.0..=400.0)
                 .speed(0.1)
                 .prefix("Src BPM "),
         )
+        .midi_menu(ui, &format!("{prefix}.warp_bpm"))
         .on_hover_text("The original tempo of this sample, not the song tempo");
         ui.add(
-            egui::DragValue::new(&mut lane.warp_beats)
+            crate::midi::drag_value(ui, &mut lane.warp_beats)
                 .range(1..=256)
                 .prefix("Beats "),
         )
+        .midi_menu(ui, &format!("{prefix}.warp_beats"))
         .on_hover_text("Number of quarter-note beats in the selected IN/OUT region");
         let fitted = frames.and_then(|frames| lane.fitted_warp_bpm(frames));
         if ui
             .add_enabled(fitted.is_some(), egui::Button::new("FIT"))
+            .midi_menu(ui, &format!("{prefix}.warp_fit"))
             .on_hover_text("Calculate source BPM from Beats and the selected audio; enable Warp")
             .clicked()
         {
@@ -247,12 +270,20 @@ fn lane_row(
             }
             let solo = ui.add_sized([20.0, 20.0], egui::Button::new("S").selected(lane.solo));
             regions[1] = solo.rect;
-            if solo.on_hover_text("Solo this sample").clicked() {
+            if solo
+                .midi_menu(ui, &format!("sampler{}.solo", index + 1))
+                .on_hover_text("Solo this sample")
+                .clicked()
+            {
                 lane.solo = !lane.solo;
             }
             let mute = ui.add_sized([20.0, 20.0], egui::Button::new("M").selected(lane.muted));
             regions[2] = mute.rect;
-            if mute.on_hover_text("Mute this sample").clicked() {
+            if mute
+                .midi_menu(ui, &format!("sampler{}.mute", index + 1))
+                .on_hover_text("Mute this sample")
+                .clicked()
+            {
                 lane.muted = !lane.muted;
             }
         });
@@ -298,10 +329,11 @@ impl App {
                     ui.small("LEVEL");
                     ui.add_sized(
                         [26.0, 102.0],
-                        egui::Slider::new(&mut bus.gain, 0.0..=2.0)
+                        crate::midi::slider(ui, &mut bus.gain, 0.0..=2.0)
                             .vertical()
                             .show_value(false),
-                    );
+                    )
+                    .midi_menu(ui, "sampler.level");
                     ui.small(format!("{:.0}%", bus.gain * 100.0));
                 });
                 let (meters, _) = ui.allocate_exact_size(Vec2::new(17.0, 132.0), Sense::hover());
@@ -329,14 +361,15 @@ impl App {
                 }
                 ui.vertical(|ui| {
                     ui.set_width(96.0);
-                    float_knob(ui, &mut bus.pan, -1.0..=1.0, "PAN");
-                    float_knob(ui, &mut bus.delay, 0.0..=1.0, "DELAY");
+                    float_knob(ui, &mut bus.pan, -1.0..=1.0, "PAN", "sampler.pan");
+                    float_knob(ui, &mut bus.delay, 0.0..=1.0, "DELAY", "sampler.delay");
                 });
             });
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     if ui
                         .add_sized([52.0, 22.0], egui::Button::new("DIST").selected(bus.dist))
+                        .midi_menu(ui, "sampler.dist")
                         .clicked()
                     {
                         bus.dist = !bus.dist;
@@ -349,7 +382,13 @@ impl App {
                         bus.reverb_send = if on { 0.0 } else { 0.3 };
                     }
                 });
-                float_knob(ui, &mut bus.reverb_send, 0.0..=1.0, "REV SEND");
+                float_knob(
+                    ui,
+                    &mut bus.reverb_send,
+                    0.0..=1.0,
+                    "REV SEND",
+                    "sampler.send",
+                );
             });
         });
     }
@@ -445,7 +484,9 @@ impl App {
                                             (at - lane.start).abs() <= (at - lane.end).abs();
                                         ui.data_mut(|d| d.insert_temp(id, entry));
                                     }
-                                    if response.dragged() || response.clicked() {
+                                    if response.dragged_by(egui::PointerButton::Primary)
+                                        || response.clicked()
+                                    {
                                         let entry =
                                             ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(true);
                                         trim_at(lane, entry, at, minimum);
@@ -457,7 +498,7 @@ impl App {
                                 ui.horizontal(|ui| {
                                     if ui
                                         .add(
-                                            egui::DragValue::new(&mut entry)
+                                            crate::midi::drag_value(ui, &mut entry)
                                                 .speed(0.001)
                                                 .fixed_decimals(3)
                                                 .prefix("IN ")
@@ -469,7 +510,7 @@ impl App {
                                     }
                                     if ui
                                         .add(
-                                            egui::DragValue::new(&mut exit)
+                                            crate::midi::drag_value(ui, &mut exit)
                                                 .speed(0.001)
                                                 .fixed_decimals(3)
                                                 .prefix("OUT ")
@@ -497,33 +538,41 @@ impl App {
                                     (Mode::Gate, "GATE"),
                                     (Mode::Loop, "LOOP"),
                                 ] {
-                                    ui.selectable_value(&mut lane.mode, mode, label);
+                                    ui.selectable_value(&mut lane.mode, mode, label)
+                                        .midi_menu(ui, &format!("sampler{}.mode", selected + 1));
                                 }
-                                if ui.selectable_label(lane.reverse, "REVERSE").clicked() {
+                                if ui
+                                    .selectable_label(lane.reverse, "REVERSE")
+                                    .midi_menu(ui, &format!("sampler{}.reverse", selected + 1))
+                                    .clicked()
+                                {
                                     lane.reverse = !lane.reverse;
                                 }
                                 ui.add(
-                                    egui::DragValue::new(&mut lane.pitch)
+                                    crate::midi::drag_value(ui, &mut lane.pitch)
                                         .range(-24..=24)
                                         .prefix("Pitch "),
-                                );
+                                )
+                                .midi_menu(ui, &format!("sampler{}.pitch", selected + 1));
                                 ui.add(
-                                    egui::DragValue::new(&mut lane.gain)
+                                    crate::midi::drag_value(ui, &mut lane.gain)
                                         .range(0.0..=2.0)
                                         .speed(0.005)
                                         .prefix("Level "),
-                                );
+                                )
+                                .midi_menu(ui, &format!("sampler{}.level", selected + 1));
                                 ui.add(
-                                    egui::DragValue::new(&mut lane.send)
+                                    crate::midi::drag_value(ui, &mut lane.send)
                                         .range(0.0..=1.0)
                                         .speed(0.005)
                                         .prefix("REV "),
-                                );
+                                )
+                                .midi_menu(ui, &format!("sampler{}.send", selected + 1));
                             });
                             let frames =
                                 self.studio.waves[selected].as_ref().map(|w| w.frames.len());
-                            warp_controls(ui, lane, frames);
-                            gater_controls(ui, lane);
+                            warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1));
+                            gater_controls(ui, lane, &format!("sampler{}", selected + 1));
                             let bars = usize::from(lane.bars.clamp(1, 64));
                             if self.studio.follow && self.panel.transport.playing {
                                 self.studio.bar = tick / 768 % bars;
@@ -531,7 +580,7 @@ impl App {
                             self.studio.bar = self.studio.bar.min(bars - 1);
                             ui.horizontal(|ui| {
                                 ui.add(
-                                    egui::DragValue::new(&mut lane.bars)
+                                    crate::midi::drag_value(ui, &mut lane.bars)
                                         .range(1..=64)
                                         .prefix("Length ")
                                         .suffix(" bars"),
@@ -539,7 +588,7 @@ impl App {
                                 let mut bar = self.studio.bar + 1;
                                 if ui
                                     .add(
-                                        egui::DragValue::new(&mut bar)
+                                        crate::midi::drag_value(ui, &mut bar)
                                             .range(1..=bars)
                                             .prefix("Bar "),
                                     )
@@ -573,8 +622,12 @@ impl App {
                                     }
                                     response.context_menu(|ui| {
                                         ui.add(
-                                            egui::Slider::new(&mut lane.steps[index], 0..=127)
-                                                .text("Velocity"),
+                                            crate::midi::slider(
+                                                ui,
+                                                &mut lane.steps[index],
+                                                0..=127,
+                                            )
+                                            .text("Velocity"),
                                         );
                                     });
                                 }
@@ -613,6 +666,7 @@ impl App {
                     ui.horizontal(|ui| {
                         if ui
                             .selectable_label(self.studio.settings.enabled, "SPACE")
+                            .midi_menu(ui, "studio.enabled")
                             .clicked()
                         {
                             self.studio.settings.enabled = !self.studio.settings.enabled;
@@ -625,9 +679,15 @@ impl App {
                     ui.label(&self.studio.ir_name);
                     ui.horizontal(|ui| {
                         let s = &mut self.studio.settings;
-                        float_knob(ui, &mut s.return_gain, 0.0..=1.0, "RETURN");
-                        float_knob(ui, &mut s.predelay_ms, 0.0..=200.0, "PREDELAY");
-                        float_knob(ui, &mut s.width, 0.0..=2.0, "WIDTH");
+                        float_knob(ui, &mut s.return_gain, 0.0..=1.0, "RETURN", "studio.return");
+                        float_knob(
+                            ui,
+                            &mut s.predelay_ms,
+                            0.0..=200.0,
+                            "PREDELAY",
+                            "studio.predelay",
+                        );
+                        float_knob(ui, &mut s.width, 0.0..=2.0, "WIDTH", "studio.width");
                     });
                     ui.horizontal(|ui| {
                         float_knob(
@@ -635,12 +695,14 @@ impl App {
                             &mut self.studio.settings.low_cut,
                             20.0..=2000.0,
                             "LOW CUT",
+                            "studio.low_cut",
                         );
                         float_knob(
                             ui,
                             &mut self.studio.settings.high_cut,
                             2000.0..=20000.0,
                             "HIGH CUT",
+                            "studio.high_cut",
                         );
                         if ui.small_button("IR / SENDS").clicked() {
                             self.studio.reverb_open = true;
@@ -666,6 +728,7 @@ impl App {
                         let id = format!("{section}.on");
                         if ui
                             .selectable_label(self.panel.toggle_on(&id), title)
+                            .midi_menu(ui, &id)
                             .clicked()
                         {
                             self.panel.press(&id, 0.0);
@@ -683,7 +746,7 @@ impl App {
                             let old = self.panel.knob(&id);
                             let mut value = f64::from(old) / 1000.0;
                             ui.push_id(&id, |ui| {
-                                float_knob(ui, &mut value, 0.0..=1.0, label);
+                                float_knob(ui, &mut value, 0.0..=1.0, label, &id);
                             });
                             let next = (value * 1000.0).round() as i32;
                             if next != old {
@@ -696,13 +759,18 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.colored_label(ACID, "MASTER");
                         let on = self.panel.toggle_on("master.comp");
-                        if ui.selectable_label(on, "COMP").clicked() {
+                        if ui
+                            .selectable_label(on, "COMP")
+                            .midi_menu(ui, "master.comp")
+                            .clicked()
+                        {
                             self.panel.press("master.comp", 0.0);
                         }
                     });
                     let mut level = self.panel.fader("master.fader");
                     if ui
-                        .add(egui::Slider::new(&mut level, 0..=999).text("LEVEL"))
+                        .add(crate::midi::slider(ui, &mut level, 0..=999).text("LEVEL"))
+                        .midi_menu(ui, "master.fader")
                         .changed()
                     {
                         self.panel.set_fader("master.fader", level);

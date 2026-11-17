@@ -6,6 +6,37 @@ use orb_player::{Audio, CALL_FRAMES};
 use super::*;
 use crate::link::Link;
 
+#[test]
+fn context_learning_maximum_and_removal_use_the_regular_saved_routing() {
+    let ctx = egui::Context::default();
+    let mut app = App::new(Panel::new(), None);
+    app.midi.started = true;
+    app.settings.midi.enabled = true;
+    app.midi.filter = "tr909.ch_level".into();
+    let action = |app: &mut App, action: context::Action| {
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            context::queue(ui, action.clone());
+            app.midi_tick(ui.ctx());
+        });
+        output.textures_delta.clear();
+    };
+    action(&mut app, context::Action::Learn("mixer3.level".into()));
+    assert_eq!(app.midi.learning.as_deref(), Some("mixer3.level"));
+    assert!(
+        app.midi
+            .handle_cc(cc(7, 100), &mut app.settings.midi, &mut app.panel, 0.0)
+    );
+    action(
+        &mut app,
+        context::Action::Range("mixer3.level".into(), ValueRange { max: 50 }),
+    );
+    assert_eq!(app.settings.midi.ranges["mixer3.level"].max, 50);
+    assert!(app.midi.learning.is_none());
+    action(&mut app, context::Action::Remove("mixer3.level".into()));
+    assert!(app.settings.midi.bindings.is_empty());
+    assert!(app.settings.midi.ranges.is_empty());
+}
+
 fn cc(controller: u8, value: u8) -> Cc {
     Cc {
         channel: 1,

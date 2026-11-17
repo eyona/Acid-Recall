@@ -40,6 +40,9 @@ fn clean(value: f64) -> f64 {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
+    /// Per-machine calibration. Missing fields in older projects preserve the legacy mix.
+    #[serde(default)]
+    pub drum_gain_db: [f64; 2],
     #[serde(default)]
     pub sampler_bus: SamplerBusSettings,
     pub sends: [f64; 4],
@@ -55,6 +58,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            drum_gain_db: [6.0, 0.0],
             sampler_bus: SamplerBusSettings::default(),
             lanes: std::array::from_fn(|_| Lane::default()),
             sends: [0.0; 4],
@@ -74,6 +78,13 @@ impl Settings {
         fn finite(v: f64, lo: f64, hi: f64) -> f64 {
             if v.is_finite() { v.clamp(lo, hi) } else { lo }
         }
+        self.drum_gain_db = self.drum_gain_db.map(|v| {
+            if v.is_finite() {
+                v.clamp(-12.0, 12.0)
+            } else {
+                0.0
+            }
+        });
         for lane in &mut self.lanes {
             lane.sanitize();
         }
@@ -87,6 +98,7 @@ impl Settings {
 }
 
 pub struct Studio {
+    drum_gain: [f64; 2],
     pub settings: Box<Settings>,
     pub sampler: Sampler,
     sampler_bus: bus::Bus,
@@ -110,6 +122,7 @@ impl Studio {
     /// Prepare on a worker/UI thread, then transfer the box to the player.
     pub fn new(convolver: Box<Convolver>) -> Self {
         Self {
+            drum_gain: [1.0; 2],
             settings: Box::default(),
             sampler: Sampler::default(),
             sampler_bus: bus::Bus::default(),
@@ -159,6 +172,25 @@ impl Studio {
 
     pub fn begin(&mut self) {
         self.send = [[0.0; 64]; 2];
+    }
+
+    /// A smoothed calibration before inserts, meters and all sends; legacy frames skip it.
+    pub fn trim_drum(&mut self, channel: usize, audio: &mut crate::frame::Block) {
+        let Some(index) = channel.checked_sub(2).filter(|&i| i < 2) else {
+            return;
+        };
+        let db = self.settings.drum_gain_db[index];
+        let target = if db.is_finite() {
+            10.0_f64.powf(db.clamp(-12.0, 12.0) / 20.0)
+        } else {
+            1.0
+        };
+        for sample in audio {
+            smooth(&mut self.drum_gain[index], target, 1.0 / 220.5);
+            if self.drum_gain[index] != 1.0 {
+                *sample = (*sample as f64 * self.drum_gain[index]) as f32;
+            }
+        }
     }
 
     pub fn modulation(&mut self, mut data: Modulation) {

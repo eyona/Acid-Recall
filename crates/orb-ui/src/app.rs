@@ -905,6 +905,7 @@ impl App {
     }
 
     fn control(&mut self, ui: &mut Ui, view: &View, c: &Ctl, now: f64) {
+        use crate::midi::MidiMenu;
         let rect = view.rect(c.x, c.y, c.w, c.h);
         match c.kind.as_str() {
             "area" | "steps" => {}
@@ -915,6 +916,7 @@ impl App {
             "knob" => self.knob(ui, view, c, rect),
             "fader" => self.fader(ui, view, c, rect),
             "display" => {
+                self.hit(ui, c, rect).midi_menu(ui, &c.id);
                 let n = (c.w / 9.0) as usize;
                 let frames = behavior::digit_frames(self.panel.display(&c.id), n);
                 for (i, f) in frames.into_iter().enumerate() {
@@ -927,7 +929,7 @@ impl App {
                 paint_part(ui, &name, rect);
             }
             kind => {
-                let r = self.hit(ui, c, rect);
+                let r = self.hit(ui, c, rect).midi_menu(ui, &c.id);
                 let down = r.is_pointer_button_down_on() || self.key_held(&c.id);
                 match kind {
                     "repeat" | "wind" => self.repeat(ui, c, &r),
@@ -1001,7 +1003,7 @@ impl App {
     /// True on the frame the mouse goes down on the control (the action runs at mouse down).
     fn first_press(&self, ui: &Ui, c: &Ctl, r: &Response) -> bool {
         let (id, mut g) = Self::gesture(ui, c);
-        let down = r.is_pointer_button_down_on();
+        let down = r.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
         let first = down && !g.down;
         g.down = down;
         ui.data_mut(|d| d.insert_temp(id, g));
@@ -1042,9 +1044,10 @@ impl App {
     }
 
     fn knob(&mut self, ui: &mut Ui, view: &View, c: &Ctl, rect: Rect) {
-        let r = self.hit(ui, c, rect);
+        use crate::midi::MidiMenu;
+        let r = self.hit(ui, c, rect).midi_menu(ui, &c.id);
         let (id, mut g) = Self::gesture(ui, c);
-        let down = r.is_pointer_button_down_on();
+        let down = r.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
         if r.hovered() || down {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
         }
@@ -1083,9 +1086,10 @@ impl App {
     }
 
     fn fader(&mut self, ui: &mut Ui, view: &View, c: &Ctl, rect: Rect) {
-        let r = self.hit(ui, c, rect);
+        use crate::midi::MidiMenu;
+        let r = self.hit(ui, c, rect).midi_menu(ui, &c.id);
         let (id, mut g) = Self::gesture(ui, c);
-        let down = r.is_pointer_button_down_on();
+        let down = r.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
         if down {
             self.panel.held = Some(c.id.clone());
             if !g.down {

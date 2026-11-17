@@ -50,9 +50,10 @@ CC rising above 63 and re-arm below 64; configure momentary CC buttons according
 switches use below 64 / above 63 directly. Effect numeric selectors map to their valid ranges.
 
 MIDI input is handled on the UI thread, polling at 8 ms while connected, and forwarded to the
-existing player command queue. Its 1024-frame render-call timing still applies. No MIDI work
-or allocation is added to the audio callback. Clock input/output and direct note playing are
-reserved for a later change.
+existing player command queue. Controller-only playback retains 1024-frame render calls;
+MIDI Clock sync uses 64-frame calls and a separate driver worker. No MIDI driver calls or
+allocation run on the audio callback. See [MIDI Clock IN/OUT](midi-clock.md) for sync setup.
+Direct MIDI note playing is not implemented.
 
 ## Verification
 
@@ -67,6 +68,27 @@ delivery through the real player. The Windows preview also runs settings, wiring
 audio allocation tests and builds a portable executable; the PR CI runs the full workspace.
 A physical UC-33e test is still needed to verify USB enumeration,
 driver opening, button preset behavior and shutdown/reconnection on the user's PC.
+
+## Right-click MIDI Learn and a maximum per control
+
+Right-click an assignable knob, fader, switch or button and choose **MIDI LEARN...**.
+Move the physical controller you want to assign. The same mapping is used by the rack,
+detailed editors and the MIDI Controller window. Configure an input port first; if no
+controller is connected, Learn opens the MIDI settings. Only CC messages can be learned.
+
+Once assigned, right-click again to **Remove MIDI assignment** or set **MAX** for a
+continuous control. MAX is freely adjustable from **0 to 127**, independently for every
+assignment. A physical fader at 127 reaches your chosen MAX: choose 50 for a maximum
+parameter value of 50, 120 for 120, or 127 for the full range. The whole fader travel is
+rescaled smoothly; the bottom remains zero. There is no per-assignment MIN setting.
+**Reset MAX to 127** restores the full range. MAX can also be edited in the assignments list.
+
+These limits affect MIDI input only; mouse edits remain unrestricted. Device Minimum CC
+calibration still happens first, then the per-control maximum. Soft takeover works in the
+resulting output range, including when the current value is above a newly reduced MAX.
+Assignments and their maxima save automatically and travel together in routing exports.
+Old routing files retain the full 0–127 range. Relearning a target keeps its chosen MAX;
+removing its assignment removes the associated cap.
 
 ## Choosing the independent 909 hat levels
 
