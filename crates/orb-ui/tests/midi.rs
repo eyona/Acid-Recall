@@ -227,17 +227,30 @@ fn pickup_waits_for_crossing_and_rearms_after_an_external_change() {
 }
 
 #[test]
-fn buttons_fire_once_per_press_and_selectors_use_their_real_range() {
+fn action_buttons_fire_once_and_boolean_effects_follow_absolute_states() {
     let mut p = Panel::new();
     let mut r = Router::default();
     let c = config("mixer3.dist", false);
-    let initial = p.toggle_on("mixer3.dist");
     for value in [127, 127, 0] {
         r.apply(cc(1, value), &c, &mut p, 0.0);
     }
-    assert_eq!(p.toggle_on("mixer3.dist"), !initial);
+    assert!(!p.toggle_on("mixer3.dist"));
     r.apply(cc(1, 127), &c, &mut p, 0.0);
-    assert_eq!(p.toggle_on("mixer3.dist"), initial);
+    assert!(p.toggle_on("mixer3.dist"));
+    let c = config("transport.play", false);
+    r.reset();
+    p.events.clear();
+    for value in [127, 127, 0, 127] {
+        r.apply(cc(1, value), &c, &mut p, 0.0);
+    }
+    assert_eq!(
+        p.events
+            .iter()
+            .filter(|e| matches!(e,
+        Event::Press { id } if id == "transport.play"))
+            .count(),
+        2
+    );
     for (id, lo, hi) in [("delay.steps", 1, 32), ("pcf.pattern", 0, 54)] {
         let c = config(id, false);
         r.apply(cc(1, 0), &c, &mut p, 0.0);
@@ -250,6 +263,97 @@ fn buttons_fire_once_per_press_and_selectors_use_their_real_range() {
     assert_eq!(p.switch_position("tb303_1.wave"), 1);
     r.apply(cc(1, 0), &c, &mut p, 0.0);
     assert_eq!(p.switch_position("tb303_1.wave"), 0);
+}
+
+#[test]
+fn all_four_machine_power_buttons_follow_each_latching_cc_state() {
+    for row in 1..=4 {
+        let id = format!("mixer{row}.mute");
+        assert_eq!(kind(&id), Some(Kind::Switch));
+        let c = config(&id, true);
+        let mut router = Router::default();
+        let mut panel = Panel::new();
+        for value in [0, 127, 127, 0, 0, 127, 0, 63, 64] {
+            panel.events.clear();
+            let previous = panel.toggle_on(&id);
+            router.apply(cc(1, value), &c, &mut panel, 0.0);
+            assert_eq!(panel.toggle_on(&id), value >= 64, "{id}, CC {value}");
+            assert_eq!(panel.events.len(), usize::from(previous != (value >= 64)));
+        }
+    }
+}
+
+#[test]
+fn every_native_effect_and_route_follows_zero_and_127_without_double_presses() {
+    let mut targets = vec![
+        "delay.on".to_string(),
+        "dist.on".into(),
+        "pcf.on".into(),
+        "comp.on".into(),
+        "master.comp".into(),
+    ];
+    for row in 1..=4 {
+        for name in ["dist", "pcf", "comp"] {
+            targets.push(format!("mixer{row}.{name}"));
+        }
+        for name in ["on", "shuffle"] {
+            targets.push(format!("pattern{row}.{name}"));
+        }
+    }
+    for id in targets {
+        assert_eq!(kind(&id), Some(Kind::Switch), "{id}");
+        let mut panel = Panel::new();
+        let mut router = Router::default();
+        let c = config(&id, true);
+        for value in [0, 127, 127, 0, 0, 127, 0] {
+            router.apply(cc(1, value), &c, &mut panel, 0.0);
+            assert_eq!(panel.toggle_on(&id), value >= 64, "{id}, CC {value}");
+        }
+    }
+}
+
+#[test]
+fn inactive_route_off_messages_do_not_disable_another_channels_shared_effect() {
+    let mut panel = Panel::new();
+    let mut router = Router::default();
+    for effect in ["pcf", "comp"] {
+        let first = format!("mixer1.{effect}");
+        let second = format!("mixer2.{effect}");
+        for (id, value) in [(&first, 127), (&second, 127), (&first, 0), (&second, 127)] {
+            router.apply(cc(1, value), &config(id, false), &mut panel, 0.0);
+        }
+        assert!(!panel.toggle_on(&first));
+        assert!(panel.toggle_on(&second));
+        router.apply(cc(1, 0), &config(&second, false), &mut panel, 0.0);
+        assert!(!panel.toggle_on(&second));
+    }
+}
+
+#[test]
+fn machine_power_states_reach_the_real_player_without_relearning() {
+    let samples = Some(rbm::standard::builtin_samples());
+    let (mut link, mut audio) = Link::new(Arc::new(Tables::new()), samples.clone());
+    let mut panel = Panel::new();
+    link.load_new(samples, &mut panel);
+    let mut router = Router::default();
+    let mut out = [0i16; CALL_FRAMES * 2];
+    audio.render_i16(&mut out);
+    link.sync(&mut panel);
+    for row in 0..4 {
+        let id = format!("mixer{}.mute", row + 1);
+        let c = config(&id, false);
+        for value in [0, 127, 0, 127] {
+            router.apply(cc(1, value), &c, &mut panel, 0.0);
+            link.sync(&mut panel);
+            audio.render_i16(&mut out);
+            link.sync(&mut panel);
+            assert_eq!(panel.toggle_on(&id), value >= 64);
+            assert_eq!(
+                link.player().snapshot().mixer.channels[row].enabled != 0,
+                value >= 64
+            );
+        }
+    }
 }
 
 #[test]

@@ -85,7 +85,7 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 | Sampler | Eight lanes, sequences up to 64 bars, WAV/AIFF/MP3, IN/OUT trimming and Reverse. |
 | Sample performance | One Shot, Auto Cut, Gate and Loop, with Solo/Mute beside each sample name. |
 | Rhythmic gating | A gater driven by a selected TR voice, tempo-based Hold, smoothing and optional sidechain. |
-| Sampler mixer | MIDI-assignable ON/OFF, global level, stereo meters, pan, distortion, delay and global reverb alongside individual sends. |
+| Sampler mixer | MIDI-assignable ON/OFF, a MIX strip matching the four machines with a compact fader and ten-segment meter, pan, distortion, delay and global reverb. |
 | Interface | A graphite rack with visible TR voice parameters, an integrated sampler and a permanent FX column. |
 | Portable sessions | `.orb338` projects containing samples, impulse responses and Studio settings. |
 

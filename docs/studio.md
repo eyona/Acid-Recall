@@ -112,7 +112,7 @@ and lane settings. OFF smoothly silences the bus and new sends while existing ef
 decay; its playheads keep time so it resumes in sync. Old projects default to ON.
 The sampler has a global mixer strip with Level, stereo signal meters, Pan, DIST routing,
 Delay send and REV send. DIST and Delay use the same shared effects configured in the FX
-column; enable those effects there as for the other machines. Global level and pan act on
+column; enable those effects there as for the other machines. MIX level and pan act on
 the summed lanes and their reverb sends without changing each lane's own settings. Global
 REV adds another send and does not replace individual lane REV amounts. Existing effect
 tails decay when sends or volume are lowered.
@@ -276,6 +276,14 @@ See [MIDI Clock setup and limits](midi-clock.md) for hardware connections and tr
 behavior. This preview needs real-hardware timing feedback from testers.
 
 ## MIDI Learn on the rack
+
+The sampler's **MIX** strip uses the same compact fader, green ten-segment meter and
+control geometry as the four original machines. Its meter displays the higher L/R peak
+in one column; audio remains stereo. The MIDI target stays `sampler.level`, so existing
+assignments, saved gain, custom MAX values and portable projects continue to work.
+
+Machine power and effect ON/OFF/routing buttons follow absolute **0 / 127** CC states,
+just like sampler ON/OFF. A controller in latching/toggle mode changes state on every press.
 
 Right-click an assignable control, choose **MIDI LEARN...**, then move your physical
 controller. Right-click again to remove the assignment or choose its **MAX** (0–127).

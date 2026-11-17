@@ -42,7 +42,7 @@ pub fn controls() -> Vec<(String, String)> {
     }
     for (name, label) in [
         ("on", "On / Off"),
-        ("level", "Global level"),
+        ("level", "Mix"),
         ("pan", "Global pan"),
         ("dist", "Distortion routing"),
         ("delay", "Delay send"),
@@ -464,6 +464,52 @@ mod tests {
         assert_eq!((bus.gain, bus.delay, bus.reverb_send), (0.0, 0.0, 0.0));
         assert!(!bus.dist);
         assert_eq!(app.studio.settings.lanes, lanes);
+    }
+
+    #[test]
+    fn reverb_and_delay_sends_follow_binary_button_states_without_affecting_other_channels() {
+        let mut app = App::new(Panel::new(), None);
+        let mut router = Router::default();
+        for row in 0..4 {
+            let id = format!("studio.send{}", row + 1);
+            for value in [127, 127, 0, 0, 127, 0] {
+                move_cc(&mut app, &mut router, &id, value, true);
+                for other in 0..4 {
+                    assert_eq!(
+                        app.studio.settings.sends[other],
+                        if other == row {
+                            f64::from(value) / 127.0
+                        } else {
+                            0.0
+                        }
+                    );
+                }
+            }
+            let id = format!("mixer{}.delay", row + 1);
+            let config = Config {
+                pickup: true,
+                bindings: vec![Binding {
+                    input: 0,
+                    channel: 1,
+                    controller: 74,
+                    target: id.clone(),
+                }],
+                ..Config::default()
+            };
+            for value in [127, 127, 0, 0, 127, 0] {
+                router.apply(
+                    Cc {
+                        channel: 1,
+                        controller: 74,
+                        value,
+                    },
+                    &config,
+                    &mut app.panel,
+                    0.0,
+                );
+                assert_eq!(app.panel.value(&id), Some(value));
+            }
+        }
     }
 
     #[test]

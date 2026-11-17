@@ -279,22 +279,26 @@ pub enum Kind {
 pub fn targets() -> Vec<(String, Kind)> {
     let mut out = Vec::new();
     for c in layout::controls() {
-        let k = match c.kind.as_str() {
-            "knob" => Kind::Knob,
-            "fader" => Kind::Fader,
-            "hswitch" | "vswitch" => Kind::Switch,
-            "toggle" | "radio" | "trigger" | "grid"
-                if c.section.starts_with("mixer")
-                    || c.section.starts_with("pattern")
-                    || matches!(
-                        c.section.as_str(),
-                        "master" | "delay" | "dist" | "pcf" | "comp"
-                    )
-                    || matches!(c.id.as_str(), "transport.play" | "transport.stop") =>
-            {
-                Kind::Button
+        let k = if panel_boolean(&c.id) {
+            Kind::Switch
+        } else {
+            match c.kind.as_str() {
+                "knob" => Kind::Knob,
+                "fader" => Kind::Fader,
+                "hswitch" | "vswitch" => Kind::Switch,
+                "toggle" | "radio" | "trigger" | "grid"
+                    if c.section.starts_with("mixer")
+                        || c.section.starts_with("pattern")
+                        || matches!(
+                            c.section.as_str(),
+                            "master" | "delay" | "dist" | "pcf" | "comp"
+                        )
+                        || matches!(c.id.as_str(), "transport.play" | "transport.stop") =>
+                {
+                    Kind::Button
+                }
+                _ => continue,
             }
-            _ => continue,
         };
         if !out.iter().any(|(id, _)| id == &c.id) {
             out.push((c.id, k));
@@ -321,6 +325,37 @@ pub fn kind(id: &str) -> Option<Kind> {
         .get_or_init(|| targets().into_iter().collect())
         .get(id)
         .copied()
+}
+
+fn panel_boolean(id: &str) -> bool {
+    let Some((section, name)) = id.split_once('.') else {
+        return false;
+    };
+    match section {
+        "mixer1" | "mixer2" | "mixer3" | "mixer4" => {
+            matches!(name, "mute" | "dist" | "pcf" | "comp")
+        }
+        "pattern1" | "pattern2" | "pattern3" | "pattern4" => matches!(name, "on" | "shuffle"),
+        "master" => name == "comp",
+        "delay" | "dist" | "pcf" | "comp" => name == "on",
+        _ => false,
+    }
+}
+
+fn effect_send(id: &str) -> bool {
+    matches!(
+        id,
+        "mixer1.delay"
+            | "mixer2.delay"
+            | "mixer3.delay"
+            | "mixer4.delay"
+            | "studio.send1"
+            | "studio.send2"
+            | "studio.send3"
+            | "studio.send4"
+            | "sampler.delay"
+            | "sampler.send"
+    )
 }
 
 pub fn label(id: &str) -> String {
@@ -419,7 +454,13 @@ impl Router {
                 }
             }
             Kind::Switch => {
-                if crate::studio::midi::is_boolean(id) {
+                if panel_boolean(id) {
+                    // Like sampler.on, latching controller buttons send their absolute state.
+                    // Retain the original panel event so mouse, MIDI and player stay in sync.
+                    if panel.toggle_on(id) != (cc.value >= 64) {
+                        panel.press(id, now);
+                    }
+                } else if crate::studio::midi::is_boolean(id) {
                     panel.set_knob(
                         id,
                         behavior::knob_from_engine(i32::from(u8::from(cc.value >= 64)) * 127),
@@ -430,10 +471,14 @@ impl Router {
             }
             Kind::Knob | Kind::Fader | Kind::Number => {
                 let range = config.ranges.get(id).copied().unwrap_or_default();
-                let value = range.map(continuous_value(cc.value, config.minimum_cc_for(input)));
+                let calibrated = continuous_value(cc.value, config.minimum_cc_for(input));
+                let value = range.map(calibrated);
                 let current = normalized(panel, id, k);
                 let state = self.pickup.entry((input, b.target.clone())).or_default();
-                if !state.accepts(value, current.min(range.max.min(127)), config.pickup) {
+                // Binary send buttons must turn an effect on/off on the first message,
+                // even when a continuous send assignment has soft takeover enabled.
+                let pickup = config.pickup && !(effect_send(id) && matches!(calibrated, 0 | 127));
+                if !state.accepts(value, current.min(range.max.min(127)), pickup) {
                     return;
                 }
                 let p = behavior::knob_from_engine(i32::from(value));

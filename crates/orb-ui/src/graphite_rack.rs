@@ -201,6 +201,150 @@ pub(crate) fn machine_power_button(
     .midi_menu(ui, id)
 }
 
+pub(crate) fn mix_knob(
+    ui: &mut Ui,
+    scale: f32,
+    id: &str,
+    label: &str,
+    rect: Rect,
+    position: &mut i32,
+) -> egui::Response {
+    let mut response = ui
+        .interact(rect, egui::Id::unique(("graphite-knob", id)), Sense::drag())
+        .midi_menu(ui, id);
+    let mut value = *position;
+    if response.dragged_by(egui::PointerButton::Primary) {
+        let delta = ui.input(|i| -i.pointer.delta().y * if i.modifiers.shift { 1.0 } else { 5.0 });
+        value = (value + delta.round() as i32).clamp(0, 1000);
+    }
+    let r = rect.width() * 0.43;
+    let center = Pos2::new(rect.center().x, rect.top() + rect.width() * 0.5);
+    ui.painter()
+        .circle_filled(center, r * 0.72, Color32::from_rgb(43, 47, 46));
+    ui.painter()
+        .circle_stroke(center, r * 0.72, Stroke::new(scale, BORDER));
+    let point = |a: f32, radius: f32| center + Vec2::new(a.sin(), -a.cos()) * radius;
+    let start = -std::f32::consts::PI * 0.75;
+    let sweep = std::f32::consts::PI * 1.5;
+    let arc = |fraction: f32| {
+        (0..=36)
+            .map(|n| point(start + sweep * fraction * n as f32 / 36.0, r))
+            .collect()
+    };
+    ui.painter().add(egui::Shape::line(
+        arc(1.0),
+        Stroke::new(1.7 * scale, BORDER),
+    ));
+    ui.painter().add(egui::Shape::line(
+        arc(value as f32 / 1000.0),
+        Stroke::new(1.7 * scale, ACID),
+    ));
+    let angle = start + sweep * value as f32 / 1000.0;
+    ui.painter().line_segment(
+        [point(angle, r * 0.25), point(angle, r * 0.60)],
+        Stroke::new(2.0 * scale, INK),
+    );
+    if !label.is_empty() {
+        ui.painter().text(
+            Pos2::new(rect.center().x, rect.bottom() - 3.0 * scale),
+            Align2::CENTER_CENTER,
+            label,
+            FontId::proportional(10.5 * scale),
+            DIM,
+        );
+    }
+    if value != *position {
+        *position = value;
+        response.mark_changed();
+    }
+    response.on_hover_text(format!(
+        "{id}: {value} / 1000\nDrag vertically; Shift for fine control."
+    ))
+}
+
+pub(crate) fn mix_fader(
+    ui: &mut Ui,
+    scale: f32,
+    id: &str,
+    rect: Rect,
+    vertical: bool,
+    position: &mut i32,
+) -> egui::Response {
+    let mut response = ui
+        .interact(
+            rect.expand(5.0 * scale),
+            egui::Id::unique(("graphite-fader", id)),
+            Sense::click_and_drag(),
+        )
+        .midi_menu(ui, id);
+    if (response.dragged_by(egui::PointerButton::Primary) || response.clicked())
+        && let Some(pos) = response.interact_pointer_pos()
+    {
+        let fraction = if vertical {
+            (rect.bottom() - pos.y) / rect.height()
+        } else {
+            (pos.x - rect.left()) / rect.width()
+        };
+        let value = (fraction.clamp(0.0, 1.0) * 999.0).round() as i32;
+        if *position != value {
+            *position = value;
+            response.mark_changed();
+        }
+    }
+    ui.painter()
+        .rect_filled(rect, 3.0 * scale, Color32::from_rgb(13, 16, 15));
+    let fraction = *position as f32 / 999.0;
+    let handle = if vertical {
+        egui::pos2(rect.center().x, rect.bottom() - rect.height() * fraction)
+    } else {
+        egui::pos2(rect.left() + rect.width() * fraction, rect.center().y)
+    };
+    let size = if vertical {
+        Vec2::new(22.0, 7.0)
+    } else {
+        Vec2::new(7.0, 20.0)
+    } * scale;
+    ui.painter()
+        .rect_filled(Rect::from_center_size(handle, size), scale, INK);
+    response.on_hover_text(format!("{id}: {:.0}%", fraction * 100.0))
+}
+
+pub(crate) fn mix_meter(ui: &Ui, rect: Rect, value: u8) {
+    for level in 0..10 {
+        let led = Rect::from_min_size(
+            egui::pos2(
+                rect.left(),
+                rect.bottom() - (level + 1) as f32 * rect.height() / 10.0,
+            ),
+            egui::vec2(rect.width(), rect.height() / 20.0),
+        );
+        ui.painter()
+            .rect_filled(led, 0.0, if level < value { ACID } else { BORDER });
+    }
+}
+
+pub(crate) fn mixer_button(
+    ui: &mut Ui,
+    rect: Rect,
+    scale: f32,
+    id: &str,
+    text: &str,
+    selected: bool,
+) -> egui::Response {
+    button(
+        ui,
+        Rack {
+            origin: Pos2::ZERO,
+            scale,
+        },
+        rect,
+        id,
+        text,
+        selected,
+    )
+    .midi_menu(ui, id)
+}
+
 impl App {
     /// Draw transport, four instruments and their mixer strips. The caller embeds the sampler
     /// and effects in the returned rectangles, in screen coordinates.
@@ -845,13 +989,7 @@ impl App {
             .get(&format!("{mixer}.meter"))
             .copied()
             .unwrap_or(0);
-        for level in 0..10 {
-            ui.painter().rect_filled(
-                rack.rect(888.0, y + 74.0 - level as f32 * 4.0, 5.0, 2.0),
-                0.0,
-                if level < meter { ACID } else { BORDER },
-            );
-        }
+        mix_meter(ui, rack.rect(888.0, y + 38.0, 5.0, 40.0), meter);
         for (i, name) in ["DIST", "PCF", "COMP", "REV"].into_iter().enumerate() {
             let id = format!("{mixer}.{}", name.to_ascii_lowercase());
             let on = if i == 3 {
@@ -889,94 +1027,25 @@ impl App {
     }
 
     fn rack_knob(&mut self, ui: &mut Ui, rack: Rack, id: &str, label: &str, rect: Rect) {
-        let response = ui
-            .interact(rect, egui::Id::unique(("graphite-knob", id)), Sense::drag())
-            .midi_menu(ui, id);
         let mut value = self.panel.knob(id);
+        let response = mix_knob(ui, rack.scale, id, label, rect, &mut value);
         if response.dragged_by(egui::PointerButton::Primary) {
             self.panel.held = Some(id.to_string());
-            let delta =
-                ui.input(|i| -i.pointer.delta().y * if i.modifiers.shift { 1.0 } else { 5.0 });
-            value = (value + delta.round() as i32).clamp(0, 1000);
+        }
+        if response.changed() {
             self.panel.set_knob(id, value);
         }
-        let r = rect.width() * 0.43;
-        let center = Pos2::new(rect.center().x, rect.top() + rect.width() * 0.5);
-        ui.painter()
-            .circle_filled(center, r * 0.72, Color32::from_rgb(43, 47, 46));
-        ui.painter()
-            .circle_stroke(center, r * 0.72, Stroke::new(rack.scale, BORDER));
-        let point = |a: f32, radius: f32| center + Vec2::new(a.sin(), -a.cos()) * radius;
-        let start = -std::f32::consts::PI * 0.75;
-        let sweep = std::f32::consts::PI * 1.5;
-        let arc = |fraction: f32| {
-            (0..=36)
-                .map(|n| point(start + sweep * fraction * n as f32 / 36.0, r))
-                .collect()
-        };
-        ui.painter().add(egui::Shape::line(
-            arc(1.0),
-            Stroke::new(1.7 * rack.scale, BORDER),
-        ));
-        ui.painter().add(egui::Shape::line(
-            arc(value as f32 / 1000.0),
-            Stroke::new(1.7 * rack.scale, ACID),
-        ));
-        let angle = start + sweep * value as f32 / 1000.0;
-        ui.painter().line_segment(
-            [point(angle, r * 0.25), point(angle, r * 0.60)],
-            Stroke::new(2.0 * rack.scale, INK),
-        );
-        if !label.is_empty() {
-            ui.painter().text(
-                Pos2::new(rect.center().x, rect.bottom() - 3.0 * rack.scale),
-                Align2::CENTER_CENTER,
-                label,
-                FontId::proportional(10.5 * rack.scale),
-                DIM,
-            );
-        }
-        response.on_hover_text(format!(
-            "{id}: {value} / 1000\nDrag vertically; Shift for fine control."
-        ));
     }
 
     fn rack_fader(&mut self, ui: &mut Ui, rack: Rack, id: &str, rect: Rect, vertical: bool) {
-        let response = ui
-            .interact(
-                rect.expand(5.0 * rack.scale),
-                egui::Id::unique(("graphite-fader", id)),
-                Sense::click_and_drag(),
-            )
-            .midi_menu(ui, id);
-        if (response.dragged_by(egui::PointerButton::Primary) || response.clicked())
-            && let Some(pos) = response.interact_pointer_pos()
-        {
-            let fraction = if vertical {
-                (rect.bottom() - pos.y) / rect.height()
-            } else {
-                (pos.x - rect.left()) / rect.width()
-            };
+        let mut value = self.panel.fader(id);
+        let response = mix_fader(ui, rack.scale, id, rect, vertical, &mut value);
+        if response.dragged_by(egui::PointerButton::Primary) || response.clicked() {
             self.panel.held = Some(id.to_string());
-            self.panel
-                .set_fader(id, (fraction.clamp(0.0, 1.0) * 999.0).round() as i32);
         }
-        ui.painter()
-            .rect_filled(rect, 3.0 * rack.scale, Color32::from_rgb(13, 16, 15));
-        let fraction = self.panel.fader(id) as f32 / 999.0;
-        let position = if vertical {
-            egui::pos2(rect.center().x, rect.bottom() - rect.height() * fraction)
-        } else {
-            egui::pos2(rect.left() + rect.width() * fraction, rect.center().y)
-        };
-        let size = if vertical {
-            Vec2::new(22.0, 7.0)
-        } else {
-            Vec2::new(7.0, 20.0)
-        } * rack.scale;
-        ui.painter()
-            .rect_filled(Rect::from_center_size(position, size), rack.scale, INK);
-        response.on_hover_text(format!("{id}: {:.0}%", fraction * 100.0));
+        if response.changed() {
+            self.panel.set_fader(id, value);
+        }
     }
 
     fn rack_advanced(&mut self, ui: &mut Ui) {

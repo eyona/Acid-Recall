@@ -293,6 +293,7 @@ fn lane_row(
 
 impl App {
     fn graphite_sampler_mixer(&mut self, ui: &mut Ui, rect: Rect) {
+        let active = !self.browsing() && !self.prompting() && !self.error_open();
         let meter = self
             .link
             .as_mut()
@@ -301,20 +302,28 @@ impl App {
         if meter.iter().any(|&v| v > 0) {
             ui.ctx().request_repaint_after(crate::app::METER_FRAME);
         }
-        surface(ui, rect, "sampler-mixer", |ui| {
+        // Reuse the four native mixer controls and their exact relative geometry.
+        let scale = rect.height() / 320.0;
+        let x_scale = crate::graphite_rack::WIDTH / 1280.0 * scale;
+        let at = |x: f32, y: f32, w: f32, h: f32| {
+            Rect::from_min_size(
+                rect.left_top() + Vec2::new(x * x_scale, y * scale),
+                Vec2::new(w * x_scale, h * scale),
+            )
+        };
+        ui.painter().rect_filled(rect, 5.0, FACE);
+        ui.painter().text(
+            at(13.0, 19.0, 0.0, 0.0).min,
+            Align2::LEFT_CENTER,
+            "MIX",
+            FontId::proportional(12.0 * scale),
+            Color32::from_rgb(133, 138, 136),
+        );
+        ui.add_enabled_ui(active, |ui| {
             let bus = &mut self.studio.settings.sampler_bus;
-            ui.horizontal(|ui| {
-                ui.colored_label(ACID, egui::RichText::new("SAMPLER MIX").strong());
-            });
-            let scale = rect.height() / 320.0;
-            let x_scale = crate::graphite_rack::WIDTH / 1280.0 * scale;
-            let power_rect = Rect::from_min_size(
-                egui::pos2(rect.right() - 53.0 * x_scale, rect.top() + 9.0 * scale),
-                Vec2::new(42.0 * x_scale, 19.0 * scale),
-            );
             if crate::graphite_rack::machine_power_button(
                 ui,
-                power_rect,
+                at(145.0, 9.0, 42.0, 19.0),
                 scale,
                 "sampler.on",
                 bus.enabled,
@@ -323,73 +332,88 @@ impl App {
             {
                 bus.enabled = !bus.enabled;
             }
-            ui.separator();
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.small("LEVEL");
-                    ui.add_sized(
-                        [26.0, 102.0],
-                        crate::midi::slider(ui, &mut bus.gain, 0.0..=2.0)
-                            .vertical()
-                            .show_value(false),
-                    )
-                    .midi_menu(ui, "sampler.level");
-                    ui.small(format!("{:.0}%", bus.gain * 100.0));
-                });
-                let (meters, _) = ui.allocate_exact_size(Vec2::new(17.0, 132.0), Sense::hover());
-                for (channel, &value) in meter.iter().enumerate() {
-                    for led in 0..12 {
-                        let r = Rect::from_min_size(
-                            egui::pos2(
-                                meters.left() + channel as f32 * 8.0,
-                                meters.bottom() - (led + 1) as f32 * 11.0,
-                            ),
-                            Vec2::new(5.0, 8.0),
-                        );
-                        let lit = u16::from(value) * 12 > led as u16 * 127;
-                        let color = if !lit {
-                            Color32::from_gray(47)
-                        } else if led >= 11 {
-                            Color32::from_rgb(220, 94, 72)
-                        } else if led >= 9 {
-                            Color32::from_rgb(222, 196, 90)
-                        } else {
-                            ACID
-                        };
-                        ui.painter().rect_filled(r, 0.5, color);
-                    }
-                }
-                ui.vertical(|ui| {
-                    ui.set_width(96.0);
-                    float_knob(ui, &mut bus.pan, -1.0..=1.0, "PAN", "sampler.pan");
-                    float_knob(ui, &mut bus.delay, 0.0..=1.0, "DELAY", "sampler.delay");
-                });
-            });
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    if ui
-                        .add_sized([52.0, 22.0], egui::Button::new("DIST").selected(bus.dist))
-                        .midi_menu(ui, "sampler.dist")
-                        .clicked()
-                    {
-                        bus.dist = !bus.dist;
-                    }
-                    let on = bus.reverb_send > 0.0;
-                    if ui
-                        .add_sized([52.0, 22.0], egui::Button::new("REV").selected(on))
-                        .clicked()
-                    {
-                        bus.reverb_send = if on { 0.0 } else { 0.3 };
-                    }
-                });
-                float_knob(
-                    ui,
-                    &mut bus.reverb_send,
-                    0.0..=1.0,
-                    "REV SEND",
-                    "sampler.send",
-                );
-            });
+            let mut level = (bus.gain / 2.0 * 999.0).round() as i32;
+            if crate::graphite_rack::mix_fader(
+                ui,
+                scale,
+                "sampler.level",
+                at(16.0, 36.0, 12.0, 43.0),
+                true,
+                &mut level,
+            )
+            .changed()
+            {
+                bus.gain = f64::from(level) / 999.0 * 2.0;
+            }
+            crate::graphite_rack::mix_meter(
+                ui,
+                at(42.0, 38.0, 5.0, 40.0),
+                crate::link::meter_state(meter[0].max(meter[1])),
+            );
+            let mut pan = ((bus.pan + 1.0) * 500.0).round() as i32;
+            if crate::graphite_rack::mix_knob(
+                ui,
+                scale,
+                "sampler.pan",
+                "PAN",
+                at(66.0, 33.0, 32.0, 47.0),
+                &mut pan,
+            )
+            .changed()
+            {
+                bus.pan = f64::from(pan) / 500.0 - 1.0;
+            }
+            let mut delay = (bus.delay * 1000.0).round() as i32;
+            if crate::graphite_rack::mix_knob(
+                ui,
+                scale,
+                "sampler.delay",
+                "DELAY",
+                at(128.0, 33.0, 32.0, 47.0),
+                &mut delay,
+            )
+            .changed()
+            {
+                bus.delay = f64::from(delay) / 1000.0;
+            }
+            if crate::graphite_rack::mixer_button(
+                ui,
+                at(12.0, 89.0, 82.0, 21.0),
+                scale,
+                "sampler.dist",
+                "DIST",
+                bus.dist,
+            )
+            .clicked()
+            {
+                bus.dist = !bus.dist;
+            }
+            let on = bus.reverb_send > 0.0;
+            if crate::graphite_rack::mixer_button(
+                ui,
+                at(106.0, 89.0, 82.0, 21.0),
+                scale,
+                "sampler.send",
+                "REV",
+                on,
+            )
+            .clicked()
+            {
+                bus.reverb_send = if on { 0.0 } else { 0.3 };
+            }
+            let mut reverb = (bus.reverb_send * 1000.0).round() as i32;
+            if crate::graphite_rack::mix_knob(
+                ui,
+                scale,
+                "sampler.send",
+                "REV SEND",
+                at(20.0, 130.0, 32.0, 47.0),
+                &mut reverb,
+            )
+            .changed()
+            {
+                bus.reverb_send = f64::from(reverb) / 1000.0;
+            }
         });
     }
 
@@ -401,7 +425,7 @@ impl App {
         let busy = self.studio.worker.is_some() || !self.studio.ready;
         let context = ui.ctx().clone();
         let tick = self.panel.transport.position.max(0) as usize;
-        let mixer_width = rect.width() * 0.185;
+        let mixer_width = rect.width() * (198.0 / 1030.0);
         let mixer = Rect::from_min_max(
             egui::pos2(rect.right() - mixer_width, rect.top()),
             rect.right_bottom(),
@@ -793,6 +817,61 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sampler_mix_fader_reaches_both_endpoints_and_right_click_does_not_move_it() {
+        let ctx = egui::Context::default();
+        let mut app = App::new(crate::model::Panel::new(), None);
+        let x_scale = crate::graphite_rack::WIDTH / 1280.0;
+        let rect = Rect::from_min_size(egui::pos2(40.0, 40.0), Vec2::new(198.0 * x_scale, 320.0));
+        let frame = |app: &mut App, events| {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(600.0, 450.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.graphite_sampler_mixer(ui, rect),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut app, vec![]);
+        for (y, expected) in [(36.0, 2.0), (79.0, 0.0)] {
+            let position = rect.left_top() + Vec2::new(22.0 * x_scale, y);
+            frame(&mut app, vec![egui::Event::PointerMoved(position)]);
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    vec![egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    }],
+                );
+            }
+            assert_eq!(app.studio.settings.sampler_bus.gain, expected);
+        }
+        let position = rect.left_top() + Vec2::new(22.0 * x_scale, 40.0);
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Secondary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        assert_eq!(app.studio.settings.sampler_bus.gain, 0.0);
+    }
 
     #[test]
     fn solo_and_mute_are_independent_clicks_next_to_the_sample_name() {

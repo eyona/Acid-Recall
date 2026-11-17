@@ -46,8 +46,18 @@ the original panel's enabled/on state.
 Enabled by default. A fader/knob waits until its hardware value reaches or crosses the current
 software value, then follows normally. Mouse edits, automation and song loads which change
 the value re-arm pickup. Turn it off for immediate absolute control. Buttons react once on a
-CC rising above 63 and re-arm below 64; configure momentary CC buttons accordingly. Two-state
-switches use below 64 / above 63 directly. Effect numeric selectors map to their valid ranges.
+CC rising above 63 and re-arm below 64 for actions such as Play, Stop and pattern selection.
+Machine ON/OFF, effect enables, distortion, PCF/compressor routing, pattern enable and swing
+use absolute states instead: **0–63 = OFF, 64–127 = ON**. Set controller buttons to their
+latching/toggle preset (alternating **0 / 127**), as for sampler ON/OFF. Repeated identical
+messages keep the state rather than toggling it. Sending OFF to an inactive PCF/compressor
+route leaves another machine's active route untouched. Reverb and delay sends remain
+continuous controls and also support 0 = no send, 127 = the chosen MAX (full send by default).
+Those send endpoints apply immediately even with soft takeover enabled, so a latching
+button works on its first message. Intermediate send values still use soft takeover.
+Effect numeric selectors
+map to their valid ranges. Existing assignments retain their saved identifiers; no relearning
+is needed for these changes.
 
 MIDI input is handled on the UI thread, polling at 8 ms while connected, and forwarded to the
 existing player command queue. Controller-only playback retains 1024-frame render calls;

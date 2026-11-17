@@ -141,6 +141,10 @@ jobs:
           phase offset. New Studio sessions balance the TR-808 with a smoothed +6 dB trim;
           both drum trims are adjustable and saved in portable projects.
 
+          Machine power and effect ON/OFF/routing buttons now follow absolute 0/127 CC
+          states like the sampler. Its MIX strip now matches the four original machines,
+          with the same compact fader, green ten-segment meter and control alignment.
+
           This rolling preview is updated after successful Studio Windows builds.
           Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}
           EOF
