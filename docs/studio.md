@@ -1,6 +1,6 @@
 # ACID RECALL — Studio guide
 
-[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](midi-controller.md)
+[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-controller.md)
 
 ## Quick start: MIDI Learn and TR balance
 
