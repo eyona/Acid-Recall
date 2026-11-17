@@ -64,7 +64,7 @@ to make music. Years later, finding OpenRB-338 brought that feeling back. Someon
 recreated ReBirth, and I was thrilled. I could play with those familiar machines again.
 
 There was another part of that reunion: my old Evolution UC-33e controller.
-Its revival is thanks to my friend **[MATTH23D](https://x.com/matth23d)**, who is skilled at restoring this kind of
+Its revival is thanks to my friend **[Matth23d](https://x.com/matth23d)**, who is skilled at restoring this kind of
 older equipment. He also builds **analog x0xb0x synthesizers — TB-303 clones**.
 He brought the UC-33e back into action, and I wanted to put its faders and knobs to work.
 
@@ -162,7 +162,7 @@ the upstream project's release packages are a separate distribution.
 - **[pingw33n and the OpenRB-338 contributors](https://github.com/pingw33n/OpenRB-338)**:
   the original open-source reimplementation, engine and historical compatibility work.
   ACID RECALL builds on their work.
-- **[MATTH23D (@matth23d)](https://x.com/matth23d)**: for restoring my Evolution UC-33e and keeping older music hardware alive,
+- **[Matth23d (@matth23d)](https://x.com/matth23d)**: for restoring my Evolution UC-33e and keeping older music hardware alive,
   alongside his work building analog x0xb0x TB-303 clones.
 - **Propellerhead's ReBirth RB-338**: the software that started this story.
 - **[smldms / ACID RECALL](https://github.com/smldms/Acid-Recall)**: this fork's musical direction, additions and continuing development,
