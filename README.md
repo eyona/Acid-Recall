@@ -76,7 +76,7 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 |---|---|
 | Hands-on control | Right-click MIDI Learn and removal, a freely chosen MAX (0–127) per continuous control, multiple inputs, soft takeover and per-device calibration. |
 | MIDI Clock sync | Windows MASTER / OUT and SLAVE / IN, 24 PPQN, Start/Continue/Stop, Song Position Pointer, clock-loss stop, 30 ms default OUT delay and signed IN offset. |
-| Drum balance | Smoothed, MIDI-assignable TR trims; new Studio sessions start with +6 dB on the TR-808 and 0 dB on the TR-909. |
+| Drum balance | Smoothed, MIDI-assignable output trims after the inserts; both TRs default to 0 dB, with a quick 0 dB reset. |
 | Portable mappings | Import and export MIDI assignments to move between computers. |
 | Pattern generation | Techno, IDM and Break styles, with notes, accents, slides and Undo. |
 | Linked bass lines | Harmonically linked TB patterns with independent lengths, such as 8 and 16 steps. |
