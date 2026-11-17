@@ -294,13 +294,16 @@ Limits save with routing presets and affect MIDI only. See [MIDI controller setu
 ## TR-808 / TR-909 balance
 
 Each drum mixer has a **TRIM** control from −12 to +12 dB, also assignable through MIDI
-Learn. New Studio sessions start at **+6 dB for the TR-808** and **0 dB for the TR-909**.
-The standard kit's isolated kick measured about 6.7 dB quieter on the 808 with equal
-controls; the correction brings that gap below 1.5 dB in the regression render. Different
-voices, patterns and imported kits still have different dynamics, so adjust TRIM to taste
-and leave headroom at the master when stacking loud sounds.
+Learn. New Studio sessions start at **0 dB on both drums**, preserving the original
+instrument levels. The previous automatic +6 dB boost on the TR-808 has been removed:
+voices, patterns and imported kits have different dynamics, so a fixed boost is not a
+reliable balance for every mix. Adjust TRIM to taste and leave headroom at the master
+when stacking loud sounds or boosting a channel.
 
-Trim changes are smoothed and feed the instrument's inserts, meters, delay and reverb.
-They save in portable `.orb338` projects. Older Studio projects without trim metadata
+Trim changes are smoothed and apply **after distortion, PCF and compression**, before
+the meters, delay and reverb sends. Changing TRIM therefore adjusts the output level
+without pushing the insert effects harder. Each TR has a **0 dB** button to reset its
+trim, including a +6 dB value saved by a previous preview. Saved values are not silently
+overwritten. They save in portable `.orb338` projects. Older Studio projects without trim metadata
 load at **0 dB on both drums**, preserving their previous mix. Legacy engine renders
 without Studio retain their original arithmetic and output.

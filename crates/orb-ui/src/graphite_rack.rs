@@ -914,30 +914,38 @@ impl App {
                     .max_rect(rack.rect(858.0, y + 129.0, 176.0, 23.0))
                     .id_salt(("drum-trim", row)),
                 |ui| {
-                    let response = ui
-                        .add(
-                            crate::midi::drag_value(
-                                ui,
-                                &mut self.studio.settings.drum_gain_db[row - 2],
+                    ui.horizontal(|ui| {
+                        let response = ui
+                            .add(
+                                crate::midi::drag_value(
+                                    ui,
+                                    &mut self.studio.settings.drum_gain_db[row - 2],
+                                )
+                                .range(-12.0..=12.0)
+                                .speed(0.1)
+                                .fixed_decimals(1)
+                                .prefix("TRIM ")
+                                .suffix(" dB"),
                             )
-                            .range(-12.0..=12.0)
-                            .speed(0.1)
-                            .fixed_decimals(1)
-                            .prefix("TRIM ")
-                            .suffix(" dB"),
-                        )
-                        .midi_menu(
-                            ui,
-                            if row == 2 {
-                                "studio.trim808"
-                            } else {
-                                "studio.trim909"
-                            },
-                        );
-                    if response.changed() {
-                        self.studio.changed();
-                        self.doc.modified = true;
-                    }
+                            .midi_menu(
+                                ui,
+                                if row == 2 {
+                                    "studio.trim808"
+                                } else {
+                                    "studio.trim909"
+                                },
+                            );
+                        let reset = ui
+                            .small_button("0 dB")
+                            .on_hover_text("Reset drum output trim");
+                        if reset.clicked() {
+                            self.studio.settings.drum_gain_db[row - 2] = 0.0;
+                        }
+                        if response.changed() || reset.clicked() {
+                            self.studio.changed();
+                            self.doc.modified = true;
+                        }
+                    });
                 },
             );
         }

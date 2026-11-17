@@ -138,8 +138,10 @@ jobs:
 
           Right-click assignable controls for MIDI LEARN, assignment removal and a custom
           MAX from 0 to 127. New Clock OUT settings default to 30 ms; Clock IN has a signed
-          phase offset. New Studio sessions balance the TR-808 with a smoothed +6 dB trim;
-          both drum trims are adjustable and saved in portable projects.
+          phase offset. Both TRs now default to 0 dB, removing the automatic +6 dB 808 boost.
+          Smoothed drum trims apply after insert effects to preserve their drive and tone.
+          Use the 0 dB buttons to reset trims saved by earlier previews; project values are
+          preserved, adjustable and saved in portable projects.
 
           Machine power and effect ON/OFF/routing buttons now follow absolute 0/127 CC
           states like the sampler. Its MIX strip now matches the four original machines,

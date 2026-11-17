@@ -58,7 +58,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            drum_gain_db: [6.0, 0.0],
+            drum_gain_db: [0.0; 2],
             sampler_bus: SamplerBusSettings::default(),
             lanes: std::array::from_fn(|_| Lane::default()),
             sends: [0.0; 4],
@@ -174,7 +174,7 @@ impl Studio {
         self.send = [[0.0; 64]; 2];
     }
 
-    /// A smoothed calibration before inserts, meters and all sends; legacy frames skip it.
+    /// Smoothed output trim after inserts, before meters and sends; legacy frames skip it.
     pub fn trim_drum(&mut self, channel: usize, audio: &mut crate::frame::Block) {
         let Some(index) = channel.checked_sub(2).filter(|&i| i < 2) else {
             return;
