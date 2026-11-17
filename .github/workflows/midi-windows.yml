@@ -126,6 +126,8 @@ jobs:
           cat > release-notes.md <<EOF
           # ACID RECALL — Windows preview
 
+          **[Visit the ACID RECALL website](https://acid-recall.netlify.app/)**
+
           Download **ACID-RECALL-Windows-x64.zip**, extract it and run **ACID-RECALL.exe**.
           No installer or GitHub account is required to download the ZIP.
 

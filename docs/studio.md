@@ -1,5 +1,7 @@
 # ACID RECALL — Studio guide
 
+[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](midi-controller.md)
+
 ## Quick start: MIDI Learn and TR balance
 
 1. Connect your controller and select its input in **Options > MIDI Controller...**.

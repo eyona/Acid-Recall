@@ -1,5 +1,7 @@
 # ACID RECALL — MIDI controller setup (Windows)
 
+[ACID RECALL website](https://acid-recall.netlify.app/) · [Studio guide](studio.md)
+
 Control ACID RECALL with a UC-33e or another controller sending absolute MIDI CC messages.
 Windows MIDI input uses the built-in WinMM API. macOS and Linux still build, but their MIDI
 device backends are not implemented. MIDI Clock sync has its own [setup guide](midi-clock.md).
