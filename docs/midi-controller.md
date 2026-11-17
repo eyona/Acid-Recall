@@ -1,24 +1,30 @@
-# UC-33e MIDI controller (Windows)
+# ACID RECALL — MIDI controller setup (Windows)
 
-This fork adds MIDI CC input through Windows' built-in WinMM MIDI API. The existing audio
-engine, song format and offline rendering are unchanged. macOS and Linux still build, but
-their MIDI device backends are not implemented in this first version.
+Control ACID RECALL with a UC-33e or another controller sending absolute MIDI CC messages.
+Windows MIDI input uses the built-in WinMM API. macOS and Linux still build, but their MIDI
+device backends are not implemented. MIDI Clock sync has its own [setup guide](midi-clock.md).
 
 ## Connect and learn
 
-1. Connect the UC-33e over USB before starting OpenRB-338. Close any other application using
+1. Connect your controller over USB before starting ACID RECALL. Close any other application using
    its MIDI input. Use a controller preset that sends ordinary absolute Control Change
    messages (0 to 127); NRPN, relative encoders, SysEx and instrument notes are not supported.
-2. Open **Options > MIDI Controller...**, enable MIDI input and choose the UC-33e input.
+2. Open **Options > MIDI Controller...**, enable MIDI input and choose your controller input.
 3. Check **Last input** changes when moving a fader or knob.
-4. Choose a parameter (the filter accepts `303`, `TR-808`, `TR-909`, `delay`, etc.), click
-   **Learn**, then move the physical control. That first message assigns without changing
-   the parameter. Learning replaces any previous owner of that CC/channel or target.
-5. Repeat for other controls. Assignments, the exact port name and the pickup preference
+4. Back on the rack, **right-click the knob, fader or button**, choose **MIDI LEARN...**,
+   then move the physical control. That first message assigns without changing the
+   parameter. Learning replaces any previous owner of that CC/channel or target.
+5. Right-click an assigned continuous control again to choose **MAX**, anywhere from
+   **0 to 127**, or **Remove MIDI assignment**. MAX is optional and defaults to 127.
+   For example, MAX 50 makes a physical fader at 127 reach 50 on the MIDI value scale.
+   The bottom remains zero; there is no per-assignment MIN.
+6. Repeat for other controls. Assignments, the exact port name and the pickup preference
    save automatically in the existing `OpenRB-338/ui.toml` configuration. They do not change
    `.rbs` files. A MIDI edit marks the song modified just like a mouse edit.
 
-Use **Remove** to clear an assignment. Close the window to keep performing; input stays
+You can also learn from the MIDI Controller window: filter for a parameter (`303`,
+`TR-808`, `TR-909`, `delay`, etc.), select it, click **Learn**, then move the controller.
+Use **Remove** there to clear an assignment. Close the window to keep performing; input stays
 active. Disable MIDI input to close the port. After unplugging/replugging the device, use
 **Refresh / reconnect**. An unavailable saved port never silently falls back to another device.
 If two inputs have the same Windows name, give the intended input a unique name.
@@ -88,8 +94,9 @@ controller is connected, Learn opens the MIDI settings. Only CC messages can be 
 
 Once assigned, right-click again to **Remove MIDI assignment** or set **MAX** for a
 continuous control. MAX is freely adjustable from **0 to 127**, independently for every
-assignment. A physical fader at 127 reaches your chosen MAX: choose 50 for a maximum
-parameter value of 50, 120 for 120, or 127 for the full range. The whole fader travel is
+assignment. A physical fader at 127 reaches your chosen MAX on the MIDI value scale:
+choose 50, 120, 127 or any other value in range. The parameter's own units (dB, Hz, etc.)
+still apply. The whole fader travel is
 rescaled smoothly; the bottom remains zero. There is no per-assignment MIN setting.
 **Reset MAX to 127** restores the full range. MAX can also be edited in the assignments list.
 

@@ -136,16 +136,27 @@ jobs:
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
 
-          Right-click assignable controls for MIDI LEARN, assignment removal and a custom
-          MAX from 0 to 127. New Clock OUT settings default to 30 ms; Clock IN has a signed
-          phase offset. Both TRs now default to 0 dB, removing the automatic +6 dB 808 boost.
-          Smoothed drum trims apply after insert effects to preserve their drive and tone.
-          Use the 0 dB buttons to reset trims saved by earlier previews; project values are
-          preserved, adjustable and saved in portable projects.
+          ## Latest changes — 18 November 2026
+
+          - **Easier MIDI Learn:** right-click a rack control, choose **MIDI LEARN...** and
+            move your controller. Right-click again to remove its assignment or choose a
+            personal **MAX (0–127)** for each continuous control. The full physical fader
+            travel reaches that maximum; no per-assignment MIN is needed.
+          - **TR output trims:** both TRs default to **0 dB**, removing the automatic +6 dB
+            808 boost. Smoothed TRIM controls span −12 to +12 dB and follow insert effects
+            to preserve their drive and tone. Use the **0 dB** buttons to reset trims saved
+            by earlier previews; existing project values are preserved.
+          - **Updated help:** the ZIP includes a MIDI Learn quick start and TR balance
+            instructions in README-MIDI.md and README-STUDIO.md.
+
+          New Clock OUT settings default to 30 ms; Clock IN has a signed phase offset.
 
           Machine power and effect ON/OFF/routing buttons now follow absolute 0/127 CC
           states like the sampler. Its MIX strip now matches the four original machines,
           with the same compact fader, green ten-segment meter and control alignment.
+
+          Thanks to **[MATTH23D (@matth23d)](https://x.com/matth23d)** for restoring the
+          Evolution UC-33e that inspired this project.
 
           This rolling preview is updated after successful Studio Windows builds.
           Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}

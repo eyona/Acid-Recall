@@ -1,4 +1,22 @@
-# OpenRB-338 Studio
+# ACID RECALL — Studio guide
+
+## Quick start: MIDI Learn and TR balance
+
+1. Connect your controller and select its input in **Options > MIDI Controller...**.
+2. Right-click an assignable rack control, choose **MIDI LEARN...**, then move the
+   physical knob, fader or button. Repeat for the controls you want to play.
+3. Right-click an assigned continuous control to set its optional **MAX (0–127)** or
+   remove the assignment. The physical control's full travel reaches your chosen maximum.
+4. Start drum balancing with both **TRIM** controls at **0 dB**. They range from −12 to
+   +12 dB and now act after the insert effects. Use each **0 dB** reset button if an older
+   project has kept the previous +6 dB 808 boost, then adjust levels for your mix.
+
+Machine and effect ON/OFF buttons follow absolute **0 / 127** CC states; use a controller
+preset with latching/toggle buttons. Reverb and delay sends also accept those endpoints.
+The sampler's **MIX** strip matches the four original machines, including its green meter.
+
+See [MIDI controller setup](midi-controller.md), [MIDI Learn details](#midi-learn-on-the-rack)
+and [TR-808 / TR-909 balance](#tr-808--tr-909-balance) below.
 
 ## Graphite Rack
 

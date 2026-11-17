@@ -21,6 +21,22 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
+## Latest preview — 18 November 2026
+
+- **MIDI Learn directly on the rack:** right-click an assignable control, choose
+  **MIDI LEARN...**, then move your controller. Right-click again to remove the assignment
+  or choose a personal **MAX from 0 to 127** for each continuous control. Your full fader
+  travel reaches that maximum; mouse edits remain unrestricted.
+- **TR-808 and TR-909 output TRIM:** −12 to +12 dB, smoothed and MIDI-assignable, with
+  **0 dB on both TRs by default**. Trim now follows the insert effects instead of driving
+  them harder. Use each **0 dB** button to reset a trim saved by an earlier preview.
+- **Consistent MIDI buttons:** machine power and effect ON/OFF/routing follow absolute
+  **0 / 127** CC states. Use a latching/toggle controller preset. The sampler now has the
+  same **MIX** fader and green ten-segment meter as the four original machines.
+
+Start with the [MIDI controller guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-controller.md)
+or the [TR balance guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/studio.md#tr-808--tr-909-balance).
+
 ## Start playing
 
 The ACID RECALL Studio features described here are currently developed on
@@ -46,7 +62,7 @@ to make music. Years later, finding OpenRB-338 brought that feeling back. Someon
 recreated ReBirth, and I was thrilled. I could play with those familiar machines again.
 
 There was another part of that reunion: my old Evolution UC-33e controller.
-Its revival is thanks to my friend **Matth23**, who is skilled at restoring this kind of
+Its revival is thanks to my friend **[MATTH23D](https://x.com/matth23d)**, who is skilled at restoring this kind of
 older equipment. He also builds **analog x0xb0x synthesizers — TB-303 clones**.
 He brought the UC-33e back into action, and I wanted to put its faders and knobs to work.
 
@@ -105,14 +121,15 @@ into the interface: a dark workspace, clear active states and restrained decorat
 ## Short description
 
 ACID RECALL is a fork of OpenRB-338 that extends the spirit of ReBirth with hands-on MIDI
-control, MIDI Clock IN/OUT synchronization, musical pattern generators, two arpeggiators
-and an integrated sampler.
+control with right-click MIDI Learn and custom per-control maxima, MIDI Clock IN/OUT
+synchronization, musical pattern generators, two arpeggiators and an integrated sampler.
+Smoothed TR output trims help balance the drums while preserving their insert-effect drive.
 A graphite rack for rediscovering familiar machines and building new sessions.
 
 ## Launch copy
 
 ReBirth was the first music software I ever installed on my PC. Discovering OpenRB-338
-years later made me want to play those machines again. My friend Matth23 had brought
+years later made me want to play those machines again. My friend [MATTH23D](https://x.com/matth23d) had brought
 my old UC-33e back to life, so I started by connecting it. Then came harmonically linked
 patterns, arpeggiators, sidechain, a sampler, a new interface and MIDI Clock IN/OUT
 sync with external machines.
@@ -143,7 +160,7 @@ the upstream project's release packages are a separate distribution.
 - **[pingw33n and the OpenRB-338 contributors](https://github.com/pingw33n/OpenRB-338)**:
   the original open-source reimplementation, engine and historical compatibility work.
   ACID RECALL builds on their work.
-- **Matth23**: for restoring my Evolution UC-33e and keeping older music hardware alive,
+- **[MATTH23D (@matth23d)](https://x.com/matth23d)**: for restoring my Evolution UC-33e and keeping older music hardware alive,
   alongside his work building analog x0xb0x TB-303 clones.
 - **Propellerhead's ReBirth RB-338**: the software that started this story.
 - **[smldms / ACID RECALL](https://github.com/smldms/Acid-Recall)**: this fork's musical direction, additions and continuing development,
