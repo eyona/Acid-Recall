@@ -39,7 +39,7 @@ The default branch still contains the upstream application code while integratio
 
 ## The story — finding that first spark again
 
-ReBirth was the first music software I ever installed on my PC in 1998.
+ReBirth was the first music software I ever installed on my PC.
 
 That is where this story starts: with the discovery that a computer could become a place
 to make music. Years later, finding OpenRB-338 brought that feeling back. Someone had
@@ -74,8 +74,9 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 
 | Area | ACID RECALL additions |
 |---|---|
-| Hands-on control | Windows MIDI Learn, multiple simultaneous controller inputs, soft takeover and per-device calibration. |
-| MIDI Clock sync | Windows MASTER / OUT and SLAVE / IN, 24 PPQN, Start/Continue/Stop, Song Position Pointer, clock-loss stop and adjustable OUT delay. |
+| Hands-on control | Right-click MIDI Learn and removal, a freely chosen MAX (0–127) per continuous control, multiple inputs, soft takeover and per-device calibration. |
+| MIDI Clock sync | Windows MASTER / OUT and SLAVE / IN, 24 PPQN, Start/Continue/Stop, Song Position Pointer, clock-loss stop, 30 ms default OUT delay and signed IN offset. |
+| Drum balance | Smoothed, MIDI-assignable TR trims; new Studio sessions start with +6 dB on the TR-808 and 0 dB on the TR-909. |
 | Portable mappings | Import and export MIDI assignments to move between computers. |
 | Pattern generation | Techno, IDM and Break styles, with notes, accents, slides and Undo. |
 | Linked bass lines | Harmonically linked TB patterns with independent lengths, such as 8 and 16 steps. |
