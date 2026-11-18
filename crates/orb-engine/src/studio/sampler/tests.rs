@@ -1,5 +1,119 @@
 use super::*;
 
+#[test]
+fn warp_markers_keep_order_endpoints_and_survive_serialization() {
+    let mut map = WarpMarkers::default();
+    assert_eq!(map.insert(0.4, 0.6, 0.1, 0.9), Some(0));
+    assert_eq!(map.insert(0.7, 0.8, 0.1, 0.9), Some(1));
+    assert_eq!(map.map(0.0, 0.1, 0.9).0, 0.1);
+    assert_eq!(map.map(0.6, 0.1, 0.9).0, 0.4);
+    assert!((map.map(1.0, 0.1, 0.9).0 - 0.9).abs() < 1e-12);
+    assert_eq!(map.insert(0.8, 0.5, 0.1, 0.9), None);
+    map.move_target(0, 1.0);
+    assert!(map.points()[0].target < map.points()[1].target);
+    map.sanitize(0.1, 0.9);
+    assert_eq!(map.points().len(), 2);
+    let saved = serde_json::to_string(&map).unwrap();
+    assert_eq!(serde_json::from_str::<WarpMarkers>(&saved).unwrap(), map);
+    map.markers[0].source = f64::NAN;
+    map.count = 255;
+    map.sanitize(0.1, 0.9);
+    assert_eq!(map.points().len(), 1);
+    map.remove(0);
+    assert!(map.points().is_empty());
+    let old: Lane = serde_json::from_str("{}").unwrap();
+    assert!(old.warp_markers.points().is_empty());
+}
+
+#[test]
+fn beat_fit_duration_follows_beats_even_with_no_anchors_or_extremely_short_audio() {
+    for (frames, beats) in [(50000, 4), (50000, 8), (2, 1), (2, 16)] {
+        let (mut sampler, mut lanes) = setup(Mode::OneShot);
+        sampler.replace(
+            0,
+            Some(Box::new(Wave {
+                frames: vec![[0.2; 2]; frames],
+            })),
+        );
+        lanes[0].warp_beats = beats;
+        lanes[0].fit_warp(Some(frames));
+        sampler.audition(0);
+        let expected = 22050 * usize::from(beats);
+        for _ in 0..expected.div_ceil(64) + 1 {
+            sampler.process(
+                &lanes,
+                0.0,
+                120.0 * 192.0 / (60.0 * 44100.0),
+                false,
+                &mut [[0.0; 64]; 2],
+                &mut [[0.0; 64]; 2],
+            );
+        }
+        assert!((sampler.voices[0][0].age as f64 - expected as f64).abs() <= 2.0);
+    }
+}
+
+#[test]
+fn warp_markers_move_audio_regions_preserve_pitch_and_follow_tempo_and_reverse() {
+    for reverse in [false, true] {
+        for bpm in [90.0, 120.0, 180.0] {
+            let mut sampler = Sampler::default();
+            sampler.replace(
+                0,
+                Some(Box::new(Wave {
+                    frames: (0..88200)
+                        .map(|n| {
+                            let hz = if n < 44100 { 440.0 } else { 880.0 };
+                            let v = (n as f64 * std::f64::consts::TAU * hz / 44100.0).sin() as f32;
+                            [v, -v]
+                        })
+                        .collect(),
+                })),
+            );
+            let mut lanes = std::array::from_fn(|_| Lane::default());
+            lanes[0].warp = true;
+            lanes[0].reverse = reverse;
+            lanes[0].warp_markers.insert(0.5, 0.75, 0.0, 1.0).unwrap();
+            sampler.audition(0);
+            let length = (44100.0 * 240.0 / bpm) as usize;
+            let mut audio = Vec::new();
+            while audio.len() < length + 64 {
+                let mut out = [[0.0; 64]; 2];
+                sampler.process(
+                    &lanes,
+                    0.0,
+                    bpm * 192.0 / (60.0 * 44100.0),
+                    false,
+                    &mut out,
+                    &mut [[0.0; 64]; 2],
+                );
+                for (&l, &r) in out[0].iter().zip(&out[1]) {
+                    assert!(l.is_finite() && (l + r).abs() < 1e-10);
+                }
+                audio.extend(out[0]);
+            }
+            assert!((sampler.voices[0][0].age as f64 - length as f64).abs() <= 2.0);
+            let frequency = |a: f64, b: f64| {
+                let slice = &audio[(a * length as f64) as usize..(b * length as f64) as usize];
+                let crossings = slice
+                    .windows(2)
+                    .filter(|w| w[0] <= 0.0 && w[1] > 0.0)
+                    .count();
+                crossings as f64 * 44100.0 / slice.len() as f64
+            };
+            let (early, late) = if reverse {
+                (880.0, 440.0)
+            } else {
+                (440.0, 880.0)
+            };
+            assert!((frequency(0.08, 0.2) - early).abs() < 15.0);
+            assert!((frequency(0.8, 0.95) - late).abs() < 15.0);
+            // The first region now occupies 75% rather than 50% of the musical duration.
+            assert!((frequency(0.55, 0.7) - 440.0).abs() < 15.0);
+        }
+    }
+}
+
 fn setup(mode: Mode) -> (Sampler, [Lane; LANES]) {
     let mut sampler = Sampler::default();
     sampler.replace(
@@ -154,6 +268,11 @@ fn release_time_warp_32_voice_performance() {
         lane.warp = true;
         lane.warp_bpm = 120.0;
         lane.pitch = [-12, -5, 0, 7, 12, 0, 3, -7][i];
+        for marker in 1..=MAX_WARP_MARKERS {
+            let source = marker as f64 / (MAX_WARP_MARKERS + 1) as f64;
+            let target = source + if marker % 2 == 0 { 0.005 } else { -0.005 };
+            lane.warp_markers.insert(source, target, 0.0, 1.0).unwrap();
+        }
         sampler.replace(
             i,
             Some(Box::new(Wave {
@@ -200,7 +319,13 @@ fn release_time_warp_32_voice_performance() {
 #[test]
 fn old_projects_default_warp_to_off_and_controls_are_sanitized() {
     let mut old = serde_json::to_value(Lane::default()).unwrap();
-    for field in ["warp", "warp_bpm", "warp_beats"] {
+    for field in [
+        "warp",
+        "warp_bpm",
+        "warp_beats",
+        "warp_grid",
+        "warp_markers",
+    ] {
         old.as_object_mut().unwrap().remove(field);
     }
     let mut lane: Lane = serde_json::from_value(old).unwrap();

@@ -85,36 +85,57 @@ The return is added before the master compressor and master fader. IR changes cr
 rapid requests keep the latest prepared response queued behind the current fade.
 
 PCF, Delay, Distortion and Compressor retain their existing sound and routing. Click their
-cards to edit all their controls, including PCF faders/pattern/mode and Delay steps/triplet.
+cards to edit all their controls, including PCF faders/pattern/mode. The Delay card now
+exposes **STEPS (1–32)** and **STRAIGHT / TRIPLET** directly, alongside Pan and Feedback.
+Drag STEPS or double-click it to type a value. The detailed editor uses the same controls;
+its formerly unresponsive step buttons are fixed. Both timing controls support MIDI Learn.
 
 ## Sampler — eight lanes, up to 64 bars per lane
 
-### TIME WARP: follow tempo while retaining pitch
+### WARP: beat matching, musical grid and local stretch markers
 
-Each lane has a TIME WARP switch and original **Src BPM** (20-400 BPM). Turn Warp on to
-follow the song tempo automatically while retaining the sample's pitch. With Warp enabled,
-Pitch transposes independently from duration. Turning Warp off restores the original
-sampler playback, where transposing also changes duration.
+1. Trim **IN / OUT** to the loop you want to use. Set **Beats** to its musical length:
+   four quarter notes for one bar in 4/4, sixteen for four bars.
+2. Enable **WARP** or press **FIT**. The selected region now lasts exactly that many beats
+   at the song tempo, retaining its pitch. For example, four beats last 1.6 seconds at
+   150 BPM. Changing Beats or the song tempo updates the duration live.
+3. Open **MARKERS / GRID** beside WARP. The ruler is numbered **measure.beat** (1.1, 1.2,
+   1.3, 1.4, 2.1...). Strong vertical lines mark bars, medium lines mark beats and light
+   lines mark sixteenths. Dense labels thin out at long lengths; zoom reveals them again.
+4. **Double-click a transient** to anchor its original audio position. Drag the anchor
+   line to move that sound to another musical time. The waveform redraws with the local
+   stretch; the surrounding endpoints remain fixed. Up to **16 anchors per lane**.
+5. **Snap 1/16** aligns destinations to sixteenths. Disable it or hold **Shift** for free
+   placement. Zoom up to **16×** and scroll horizontally for precise work. The zoom uses
+   finer waveform detail, including when IN/OUT selects a small region of a long file.
+6. Select an anchor to see its source time and edit its **Beat offset** numerically
+   (zero = the beginning of the region). Use **Remove selected**, Delete while the
+   waveform has focus, or **Reset markers** to return to a linear beat fit.
 
-For a known 120-BPM loop, enter 120 in Src BPM and enable TIME WARP. At a song tempo of
-150 BPM, a two-second loop lasts 1.6 seconds and retains its pitch. Select Loop playback
-and trigger a step to keep repeating it; One Shot, Auto Cut, Gate and Reverse also work.
+Both mouse and MIDI WARP/FIT use the beat fit. Beats is independent from the sequencer's
+Length in bars. This fits a declared musical length; it does **not** detect BPM or decide
+how many beats the recording contains. Use the correct beat count for your sample.
 
-If you know the musical length instead of the BPM, first trim IN/OUT to the exact loop,
-enter its number of quarter-note **Beats**, then press **FIT**. A two-second, four-beat
-selection calculates 120 BPM and enables Warp. Four bars in 4/4 are sixteen beats. FIT
-uses the selected audio duration; Beats is independent from the sequencer's Length in bars.
-FIT is disabled if the calculation lies outside the supported source-BPM range. It does
-not detect beats from the audio; an incorrectly specified BPM or beat count will not sync.
+Older projects retain their saved source-BPM behavior. In that mode, **Src BPM** remains
+20–400 BPM. For a known 120-BPM recording, enable WARP, choose **BPM mode**, then enter
+120. Editing Src BPM by MIDI also selects this mode when there are no anchors. Opening
+the marker editor does not silently convert an older project: press **FIT TO BEATS**
+before editing its preview grid. Once anchors are present, Beats defines the duration.
+
+Pitch remains independent from duration while warped. Turning WARP off restores ordinary
+sample playback, where transposing also changes duration. Loop, One Shot, Auto Cut, Gate
+and Reverse remain available; Reverse mirrors the anchor map in time. Anchors use absolute
+source positions; trimming removes anchors outside the new region and preserves those inside.
 
 The built-in time-domain engine uses stereo waveform-similarity overlap-add with a fixed
 grain/search budget per voice. It reads the original PCM and does not allocate memory,
 copy whole stretched files or decode audio on the callback. Both stereo channels share
-grain alignment. Warp is off by default for old projects, and its settings are saved in
-portable projects. Loading a replacement sample resets Warp to off and its source BPM to 120.
+grain alignment. Warp settings and anchors save in portable `.orb338` projects. Loading
+a replacement sample resets Warp, beat fitting and anchors instead of reusing another
+recording's map.
 
-This is uniform tempo warping per sample. Warp markers, automatic tempo detection and
-Ableton's proprietary Complex/Complex Pro processing are not included. Dense polyphonic
+Automatic tempo detection and Ableton's proprietary Complex/Complex Pro processing are
+not included. Dense polyphonic
 material and extreme tempo changes can color transients and timbre; use moderate ratios
 for more natural results. Tempo changes remain live and do not require rebuilding a sample.
 

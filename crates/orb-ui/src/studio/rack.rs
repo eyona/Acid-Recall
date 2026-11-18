@@ -190,42 +190,101 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
     });
 }
 
-pub(super) fn warp_controls(ui: &mut Ui, lane: &mut Lane, frames: Option<usize>, prefix: &str) {
+pub(super) fn delay_timing(ui: &mut Ui, panel: &mut crate::model::Panel) -> [Rect; 3] {
+    let mut rects = [Rect::NOTHING; 3];
     ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut lane.warp, "TIME WARP")
-            .midi_menu(ui, &format!("{prefix}.warp"))
-            .on_hover_text("Follow the song tempo without changing the sample pitch");
-        ui.add(
-            crate::midi::drag_value(ui, &mut lane.warp_bpm)
-                .range(20.0..=400.0)
-                .speed(0.1)
-                .prefix("Src BPM "),
-        )
-        .midi_menu(ui, &format!("{prefix}.warp_bpm"))
-        .on_hover_text("The original tempo of this sample, not the song tempo");
-        ui.add(
-            crate::midi::drag_value(ui, &mut lane.warp_beats)
-                .range(1..=256)
-                .prefix("Beats "),
-        )
-        .midi_menu(ui, &format!("{prefix}.warp_beats"))
-        .on_hover_text("Number of quarter-note beats in the selected IN/OUT region");
-        let fitted = frames.and_then(|frames| lane.fitted_warp_bpm(frames));
+        let mut steps = panel.display("delay.steps").unwrap_or(3);
+        let response = ui
+            .add(
+                crate::midi::drag_value(ui, &mut steps)
+                    .range(1..=32)
+                    .prefix("STEPS "),
+            )
+            .midi_menu(ui, "delay.steps")
+            .on_hover_text("Delay length in steps (1-32); drag or double-click to type");
+        rects[0] = response.rect;
+        if response.changed() {
+            panel.set_delay_steps(steps);
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
+        let mut mode = panel.switch_position("delay.triplet");
+        for (i, (value, label)) in [(1, "STRAIGHT"), (0, "TRIPLET")].into_iter().enumerate() {
+            let response = ui
+                .selectable_value(&mut mode, value, label)
+                .midi_menu(ui, "delay.triplet");
+            rects[i + 1] = response.rect;
+            if response.changed() {
+                panel.set_switch("delay.triplet", mode);
+            }
+        }
+    });
+    rects
+}
+
+pub(super) fn warp_controls(
+    ui: &mut Ui,
+    lane: &mut Lane,
+    frames: Option<usize>,
+    prefix: &str,
+) -> bool {
+    let mut edit = false;
+    ui.horizontal_wrapped(|ui| {
         if ui
-            .add_enabled(fitted.is_some(), egui::Button::new("FIT"))
+            .checkbox(&mut lane.warp, "WARP")
+            .midi_menu(ui, &format!("{prefix}.warp"))
+            .on_hover_text("Enable and fit the selected region to Beats at the song tempo")
+            .changed()
+            && lane.warp
+        {
+            lane.fit_warp(frames);
+        }
+        if lane.warp_grid || !lane.warp_markers.points().is_empty() {
+            ui.small("Beat fit");
+            if lane.warp_markers.points().is_empty() && ui.small_button("BPM mode").clicked() {
+                lane.warp_grid = false;
+            }
+        } else {
+            ui.add(
+                crate::midi::drag_value(ui, &mut lane.warp_bpm)
+                    .range(20.0..=400.0)
+                    .speed(0.1)
+                    .prefix("Src BPM "),
+            )
+            .midi_menu(ui, &format!("{prefix}.warp_bpm"))
+            .on_hover_text("The original tempo of this sample, not the song tempo");
+        }
+        if ui
+            .add(
+                crate::midi::drag_value(ui, &mut lane.warp_beats)
+                    .range(1..=256)
+                    .prefix("Beats "),
+            )
+            .midi_menu(ui, &format!("{prefix}.warp_beats"))
+            .on_hover_text("Number of quarter-note beats in the selected IN/OUT region")
+            .changed()
+        {
+            lane.warp_grid = true;
+        }
+        if ui
+            .add_enabled(frames.is_some(), egui::Button::new("FIT"))
             .midi_menu(ui, &format!("{prefix}.warp_fit"))
             .on_hover_text("Calculate source BPM from Beats and the selected audio; enable Warp")
             .clicked()
         {
-            lane.warp_bpm = fitted.unwrap();
-            lane.warp = true;
+            lane.fit_warp(frames);
         }
+        edit = ui
+            .add_enabled(frames.is_some(), egui::Button::new("MARKERS / GRID"))
+            .on_hover_text("Edit warp markers on the beat grid; stretch individual regions")
+            .clicked();
         ui.small(if lane.warp {
             "Tempo sync"
         } else {
             "Free playback"
         });
     });
+    edit
 }
 
 fn lane_row(
@@ -595,7 +654,10 @@ impl App {
                             });
                             let frames =
                                 self.studio.waves[selected].as_ref().map(|w| w.frames.len());
-                            warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1));
+                            if warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1))
+                            {
+                                self.studio.warp_editor = Some(selected);
+                            }
                             gater_controls(ui, lane, &format!("sampler{}", selected + 1));
                             let bars = usize::from(lane.bars.clamp(1, 64));
                             if self.studio.follow && self.panel.transport.playing {
@@ -677,7 +739,7 @@ impl App {
         let before = self.studio.settings.clone();
         let width = rect.width();
         let gap = 7.0;
-        let heights = [0.24, 0.14, 0.14, 0.14, 0.14, 0.20];
+        let heights = [0.23, 0.18, 0.14, 0.14, 0.14, 0.17];
         let mut top = rect.top();
         for (i, fraction) in heights.into_iter().enumerate() {
             let card = Rect::from_min_size(
@@ -761,6 +823,9 @@ impl App {
                             self.studio.fx = Some(section.into());
                         }
                     });
+                    if section == "delay" {
+                        delay_timing(ui, &mut self.panel);
+                    }
                     ui.horizontal(|ui| {
                         for &(name, label) in parameters {
                             let id = format!("{section}.{name}");
@@ -817,6 +882,67 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delay_steps_and_mode_controls_emit_the_real_delay_messages() {
+        let ctx = egui::Context::default();
+        let mut panel = crate::model::Panel::new();
+        panel.events.clear();
+        let frame = |panel: &mut crate::model::Panel, events| {
+            let mut rects = [Rect::NOTHING; 3];
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(300.0, 200.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    rects = delay_timing(ui, panel);
+                },
+            );
+            out.textures_delta.clear();
+            rects
+        };
+        let rects = frame(&mut panel, vec![]);
+        let event = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        for (index, value) in [(1, 1), (2, 0)] {
+            let pos = rects[index].center();
+            frame(
+                &mut panel,
+                vec![egui::Event::PointerMoved(pos), event(pos, true)],
+            );
+            frame(&mut panel, vec![event(pos, false)]);
+            assert_eq!(panel.switch("delay.triplet"), value);
+        }
+        let start = rects[0].center();
+        let end = start + Vec2::new(20.0, 0.0);
+        frame(
+            &mut panel,
+            vec![egui::Event::PointerMoved(start), event(start, true)],
+        );
+        frame(&mut panel, vec![egui::Event::PointerMoved(end)]);
+        frame(&mut panel, vec![event(end, false)]);
+        let steps = panel.display("delay.steps").unwrap();
+        assert!(steps > 3 && steps <= 32);
+        let (mut link, _) =
+            crate::link::Link::new(std::sync::Arc::new(orb_engine::tables::Tables::new()), None);
+        let messages: Vec<_> = panel.events.iter().flat_map(|e| link.messages(e)).collect();
+        for (ctrl, value) in [(1, steps as u8), (2, 1), (2, 0)] {
+            assert!(messages.contains(&crate::link::Msg::Device {
+                dev: orb_engine::song::Device::Delay.id(),
+                sub: 84,
+                data: vec![ctrl, value],
+            }));
+        }
+    }
 
     #[test]
     fn sampler_mix_fader_reaches_both_endpoints_and_right_click_does_not_move_it() {

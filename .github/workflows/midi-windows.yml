@@ -140,6 +140,12 @@ jobs:
 
           ## Latest changes — 18 November 2026
 
+          - **Delay timing on the rack:** STEPS (1–32) and STRAIGHT / TRIPLET, with MIDI
+            Learn. The detailed editor's unresponsive step controls are fixed.
+          - **Sampler WARP:** fit IN/OUT to the chosen Beats. MARKERS / GRID provides
+            numbered bars, beats and sixteenths, 16 local stretch anchors, snap/free
+            placement and 16× waveform zoom. Anchors save in portable projects.
+            Beat count is user-defined; automatic BPM detection is not included.
           - **Easier MIDI Learn:** right-click a rack control, choose **MIDI LEARN...** and
             move your controller. Right-click again to remove its assignment or choose a
             personal **MAX (0–127)** for each continuous control. The full physical fader

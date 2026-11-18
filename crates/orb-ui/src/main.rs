@@ -122,6 +122,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, Exit> {
                 r.studio_view = Some(match args.next().as_deref() {
                     Some("sampler") => "sampler".into(),
                     Some("space") => "space".into(),
+                    Some("warp") => "warp".into(),
                     _ => return Err(Exit::Bad),
                 });
             }
@@ -365,6 +366,15 @@ fn main() -> eframe::Result {
             if let Some(view) = studio_view {
                 app.studio.sampler_open = view == "sampler";
                 app.studio.reverb_open = view == "space";
+                if view == "warp" {
+                    app.studio.warp_editor = Some(0);
+                    if demo {
+                        let lane = &mut app.studio.settings.lanes[0];
+                        lane.warp = true;
+                        lane.warp_grid = true;
+                        let _ = lane.warp_markers.insert(0.5, 0.625, 0.0, 1.0);
+                    }
+                }
             }
             if let Some(mode) = browse {
                 app.open_browser(mode);

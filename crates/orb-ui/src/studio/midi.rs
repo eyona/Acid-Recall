@@ -238,10 +238,7 @@ impl App {
                     && let Some(wave) = &self.studio.waves[i]
                 {
                     let lane = &mut self.studio.settings.lanes[i];
-                    if let Some(bpm) = lane.fitted_warp_bpm(wave.frames.len()) {
-                        lane.warp_bpm = bpm;
-                        lane.warp = true;
-                    }
+                    lane.fit_warp(Some(wave.frames.len()));
                 }
                 continue;
             }
@@ -312,9 +309,25 @@ impl App {
                             "gater_attack_ms" => lane.gater_attack_ms = 0.1 + v * 99.9,
                             "gater_release_ms" => lane.gater_release_ms = 1.0 + v * 499.0,
                             "reverse" => lane.reverse = raw >= 64,
-                            "warp" => lane.warp = raw >= 64,
-                            "warp_bpm" => lane.warp_bpm = 20.0 + v * 380.0,
-                            "warp_beats" => lane.warp_beats = warp_beat_count(v),
+                            "warp" => {
+                                if raw >= 64 && !lane.warp {
+                                    let frames =
+                                        self.studio.waves[i].as_ref().map(|w| w.frames.len());
+                                    lane.fit_warp(frames);
+                                } else if raw < 64 {
+                                    lane.warp = false;
+                                }
+                            }
+                            "warp_bpm" => {
+                                lane.warp_bpm = 20.0 + v * 380.0;
+                                if lane.warp_markers.points().is_empty() {
+                                    lane.warp_grid = false;
+                                }
+                            }
+                            "warp_beats" => {
+                                lane.warp_beats = warp_beat_count(v);
+                                lane.warp_grid = true;
+                            }
                             "mute" => lane.muted = raw >= 64,
                             "solo" => lane.solo = raw >= 64,
                             "sidechain" => lane.sidechain = raw >= 64,

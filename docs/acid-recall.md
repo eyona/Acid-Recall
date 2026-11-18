@@ -23,6 +23,12 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
 
 ## Latest preview — 18 November 2026
 
+- **Delay timing on the rack:** STEPS (1–32) and STRAIGHT / TRIPLET are directly accessible,
+  MIDI-assignable and shared with the corrected detailed editor.
+- **Sampler WARP grid:** fit the trimmed sample to Beats, then use MARKERS / GRID to place
+  up to 16 local stretch anchors on a numbered bar/beat/sixteenth grid. Includes snap,
+  free placement, 16× zoom and portable project saving. Beats must be specified; this is
+  not automatic BPM detection.
 - **MIDI Learn directly on the rack:** right-click an assignable control, choose
   **MIDI LEARN...**, then move your controller. Right-click again to remove the assignment
   or choose a personal **MAX from 0 to 127** for each continuous control. Your full fader
@@ -101,6 +107,8 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 | Independent hats | Separate TR-909 CH/OH notes and levels. |
 | Convolution reverb | Stereo convolution, synthetic spaces and WAV/AIFF impulse-response import. |
 | Sampler | Eight lanes, sequences up to 64 bars, WAV/AIFF/MP3, IN/OUT trimming and Reverse. |
+| Sample warp | Pitch-preserving beat fit, numbered musical grid, local stretch markers, sixteenth snap and 16× waveform zoom. |
+| Delay timing | Direct STEPS and STRAIGHT / TRIPLET controls, also available to MIDI Learn. |
 | Sample performance | One Shot, Auto Cut, Gate and Loop, with Solo/Mute beside each sample name. |
 | Rhythmic gating | A gater driven by a selected TR voice, tempo-based Hold, smoothing and optional sidechain. |
 | Sampler mixer | MIDI-assignable ON/OFF, a MIX strip matching the four machines with a compact fader and ten-segment meter, pan, distortion, delay and global reverb. |

@@ -1,9 +1,11 @@
 //! Eight stereo lanes, fixed voice pools, sample-accurate sixteenth-note triggering.
 
 use super::audio_file::{Wave, sinc};
+mod markers;
 #[cfg(test)]
 mod tests;
 mod warp;
+pub use markers::{MAX_WARP_MARKERS, WarpMarker, WarpMarkers};
 
 pub const LANES: usize = 8;
 pub const STEPS: usize = 64 * 16;
@@ -32,6 +34,9 @@ pub struct Lane {
     pub warp: bool,
     pub warp_bpm: f64,
     pub warp_beats: u16,
+    /// Fit the selected region to Beats; false preserves older source-BPM projects.
+    pub warp_grid: bool,
+    pub warp_markers: WarpMarkers,
     pub start: f64,
     pub end: f64,
     pub attack_ms: f64,
@@ -65,6 +70,8 @@ impl Default for Lane {
             warp: false,
             warp_bpm: 120.0,
             warp_beats: 4,
+            warp_grid: false,
+            warp_markers: WarpMarkers::default(),
             start: 0.0,
             end: 1.0,
             attack_ms: 1.0,
@@ -84,6 +91,14 @@ impl Default for Lane {
 }
 
 impl Lane {
+    pub fn fit_warp(&mut self, frames: Option<usize>) {
+        self.warp = true;
+        self.warp_grid = true;
+        if let Some(bpm) = frames.and_then(|frames| self.fitted_warp_bpm(frames)) {
+            self.warp_bpm = bpm;
+        }
+    }
+
     pub fn fitted_warp_bpm(&self, frames: usize) -> Option<f64> {
         let start = ((self.start * frames as f64) as usize).min(frames);
         let end = ((self.end * frames as f64) as usize).min(frames);
@@ -110,6 +125,7 @@ impl Lane {
         self.pan = finite(self.pan, 0.0, -1.0, 1.0);
         self.start = finite(self.start, 0.0, 0.0, 1.0 - 1e-9);
         self.end = finite(self.end, 1.0, self.start + 1e-9, 1.0);
+        self.warp_markers.sanitize(self.start, self.end);
         self.attack_ms = finite(self.attack_ms, 1.0, 0.1, 2000.0);
         self.release_ms = finite(self.release_ms, 8.0, 1.0, 3000.0);
         self.gate = finite(self.gate, 0.8, 0.01, 16.0);
@@ -313,6 +329,16 @@ impl Sampler {
         let tempo = ticks_per_frame * 44100.0 * 60.0 / 192.0;
         let warp_rates: [f64; LANES] = std::array::from_fn(|i| {
             if tempo.is_finite() && tempo > 0.0 {
+                if (lanes[i].warp_grid || !lanes[i].warp_markers.points().is_empty())
+                    && let Some(wave) = &self.waves[i]
+                {
+                    let frames = wave.frames.len() as f64;
+                    let start = (lanes[i].start * frames) as usize;
+                    let end = (lanes[i].end * frames) as usize;
+                    let length = end.saturating_sub(start) as f64;
+                    return length * tempo
+                        / (60.0 * 44100.0 * f64::from(lanes[i].warp_beats.max(1)));
+                }
                 let source = if lanes[i].warp_bpm.is_finite() {
                     lanes[i].warp_bpm.clamp(20.0, 400.0)
                 } else {
@@ -366,8 +392,10 @@ impl Sampler {
                     let length = end.saturating_sub(start);
                     let rate = rates[i];
                     let advance = if lane.warp { warp_rates[i] } else { rate };
-                    let warping = lane.warp && ((advance - 1.0).abs() > 1e-10 || lane.pitch != 0);
-                    let region = warp::Region {
+                    let mapped = lane.warp && !lane.warp_markers.points().is_empty();
+                    let warping =
+                        lane.warp && (mapped || (advance - 1.0).abs() > 1e-10 || lane.pitch != 0);
+                    let mut region = warp::Region {
                         frames: &wave.frames,
                         table: &self.table,
                         start,
@@ -400,7 +428,23 @@ impl Sampler {
                             }
                         }
                         let mut value = if warping {
-                            voice.warp.read(&region, voice.position)
+                            let cursor = if mapped {
+                                // Reverse mirrors both source and destination time around the
+                                // region.
+                                let time = voice.position / length as f64;
+                                let time = if lane.reverse { 1.0 - time } else { time };
+                                let (source, slope) =
+                                    lane.warp_markers.map(time, lane.start, lane.end);
+                                region.advance = advance * slope / (lane.end - lane.start);
+                                if lane.reverse {
+                                    (lane.end - source) * frames as f64
+                                } else {
+                                    (source - lane.start) * frames as f64
+                                }
+                            } else {
+                                voice.position
+                            };
+                            voice.warp.read(&region, cursor)
                         } else {
                             voice.warp.reset();
                             let position = if lane.reverse {

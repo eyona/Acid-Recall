@@ -68,6 +68,11 @@ fn save_and_open_restore_embedded_sample_last_step_and_mix_settings() {
     app.studio.settings.lanes[7].warp = true;
     app.studio.settings.lanes[7].warp_bpm = 137.5;
     app.studio.settings.lanes[7].warp_beats = 8;
+    app.studio.settings.lanes[7].warp_grid = true;
+    app.studio.settings.lanes[7]
+        .warp_markers
+        .insert(0.4, 0.6, 0.0, 1.0)
+        .unwrap();
     app.studio.waves[7] = Some(Arc::new(Wave {
         frames: vec![[0.2, -0.1]; 1000],
     }));
@@ -88,6 +93,9 @@ fn save_and_open_restore_embedded_sample_last_step_and_mix_settings() {
     assert!(app.studio.settings.lanes[7].warp);
     assert_eq!(app.studio.settings.lanes[7].warp_bpm, 137.5);
     assert_eq!(app.studio.settings.lanes[7].warp_beats, 8);
+    assert!(app.studio.settings.lanes[7].warp_grid);
+    let marker = app.studio.settings.lanes[7].warp_markers.points()[0];
+    assert_eq!((marker.source, marker.target), (0.4, 0.6));
     assert_eq!(app.studio.settings.sampler_bus.gain, 0.42);
     assert!(app.studio.settings.sampler_bus.dist);
     assert_eq!(app.studio.settings.sampler_bus.delay, 0.31);

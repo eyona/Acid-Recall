@@ -120,6 +120,7 @@ impl App {
         if self.studio.sampler_open {
             self.sampler_editor(ctx);
         }
+        self.warp_editor(ctx);
         self.legacy_fx_editor(ctx);
         self.studio_mirror();
         self.studio_poll(ctx);
@@ -661,7 +662,10 @@ impl App {
                 let frames = self.studio.waves[selected]
                     .as_ref()
                     .map(|wave| wave.frames.len());
-                super::rack::warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1));
+                if super::rack::warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1))
+                {
+                    self.studio.warp_editor = Some(selected);
+                }
                 super::rack::gater_controls(ui, lane, &format!("sampler{}", selected + 1));
                 ui.columns(3, |columns| {
                     slider(
@@ -735,10 +739,14 @@ impl App {
             .open(&mut open)
             .default_width(430.0)
             .show(ctx, |ui| {
-                for control in crate::layout::controls()
-                    .into_iter()
-                    .filter(|c| c.section == section)
-                {
+                if section == "delay" {
+                    super::rack::delay_timing(ui, &mut self.panel);
+                }
+                for control in crate::layout::controls().into_iter().filter(|c| {
+                    c.section == section
+                        && !(section == "delay"
+                            && (c.id.starts_with("delay.steps") || c.id == "delay.triplet"))
+                }) {
                     let label = control.name().replace('_', " ");
                     match control.kind.as_str() {
                         "knob" => {
@@ -768,7 +776,7 @@ impl App {
                                 let options = if control.id == "pcf.mode" {
                                     [(0, "Low-pass"), (1, "Band-pass")]
                                 } else {
-                                    [(0, "Straight"), (1, "Triplet")]
+                                    [(0, "Triplet"), (1, "Straight")]
                                 };
                                 for (v, text) in options {
                                     if ui
@@ -789,10 +797,10 @@ impl App {
                                     self.panel.display(&control.id).unwrap_or(0)
                                 ));
                                 if ui.button("−").clicked() {
-                                    self.panel.press(&format!("{}_down", control.id), 0.0);
+                                    self.panel.arrow(&format!("{}_down", control.id));
                                 }
                                 if ui.button("+").clicked() {
-                                    self.panel.press(&format!("{}_up", control.id), 0.0);
+                                    self.panel.arrow(&format!("{}_up", control.id));
                                 }
                             });
                         }

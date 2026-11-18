@@ -636,6 +636,13 @@ impl Panel {
         behavior::switch_position(id, self.switch(id))
     }
 
+    pub fn set_delay_steps(&mut self, value: i32) {
+        let value = value.clamp(1, 32);
+        if self.numbers.insert("delay.steps".into(), value) != Some(value) {
+            self.set_event("delay.steps", value);
+        }
+    }
+
     pub fn set_switch(&mut self, id: &str, v: u8) {
         if id == "transport.mode" {
             self.transport.song_mode = v != 0;

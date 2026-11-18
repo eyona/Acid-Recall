@@ -6,6 +6,7 @@ pub mod project;
 mod rack;
 #[cfg(test)]
 mod tests;
+mod warp_editor;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -65,10 +66,12 @@ impl WaveformCache {
 
 pub struct StudioUi {
     wave_views: [WaveformCache; 9],
+    warp_peaks: [warp_editor::WarpPeaks; 8],
     waveform_epoch: u64,
     pub(crate) context: Context,
     pub modern: bool,
     pub sampler_open: bool,
+    pub warp_editor: Option<usize>,
     pub reverb_open: bool,
     pub settings: Settings,
     pub names: [String; 8],
@@ -96,10 +99,12 @@ impl Default for StudioUi {
     fn default() -> Self {
         Self {
             wave_views: std::array::from_fn(|_| WaveformCache::default()),
+            warp_peaks: std::array::from_fn(|_| warp_editor::WarpPeaks::default()),
             waveform_epoch: ASSET_EPOCH.fetch_add(1, Ordering::Relaxed),
             context: Context::default(),
             modern: false,
             sampler_open: false,
+            warp_editor: None,
             reverb_open: false,
             settings: Settings::default(),
             names: std::array::from_fn(|i| format!("Sample {:02}", i + 1)),
@@ -223,6 +228,8 @@ impl App {
                     self.studio.settings.lanes[lane].warp = false;
                     self.studio.settings.lanes[lane].warp_bpm = 120.0;
                     self.studio.settings.lanes[lane].warp_beats = 4;
+                    self.studio.settings.lanes[lane].warp_grid = false;
+                    self.studio.settings.lanes[lane].warp_markers = Default::default();
                     self.studio.changed();
                     self.doc.modified = true;
                     self.studio_command(Command::StudioWave {
