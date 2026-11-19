@@ -35,6 +35,14 @@ fn playheads_follow_the_latest_voice_reverse_warp_loop_and_stop() {
     assert!(reverse.source > 0.99 && reverse.musical > 0.99);
     render(&mut sampler, &lanes);
     assert!(sampler.playheads(&lanes)[0].unwrap().source < reverse.source);
+    lanes[0].warp = false;
+    render(&mut sampler, &lanes);
+    let head = sampler.playheads(&lanes)[0].unwrap();
+    let source = lanes[0]
+        .warp_markers
+        .map(f64::from(head.musical), 0.0, 1.0)
+        .0;
+    assert!((source - f64::from(head.source)).abs() < 1e-6);
     lanes[0].mode = Mode::Loop;
     sampler.voices[0][0].position = 50001.0;
     let head = sampler.playheads(&lanes)[0].unwrap();

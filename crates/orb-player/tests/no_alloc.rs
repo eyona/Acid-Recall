@@ -157,7 +157,7 @@ fn the_callback_does_not_allocate() {
         lane.steps[0] = 100;
         lane.steps[3] = 80;
         lane.send = 0.2;
-        lane.warp = true;
+        lane.warp = i % 2 == 0;
         lane.warp_bpm = 110.0;
         lane.warp_markers.insert(0.5, 0.65, 0.0, 1.0).unwrap();
         studio.sampler.waves[i] = Some(Box::new(orb_engine::studio::audio_file::Wave {

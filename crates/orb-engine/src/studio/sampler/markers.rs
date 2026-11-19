@@ -106,6 +106,29 @@ impl WarpMarkers {
         }
     }
 
+    /// Convert source position to its displayed grid position, including when WARP is bypassed.
+    pub fn target_for_source(&self, source: f64, start: f64, end: f64) -> f64 {
+        let points = self.points();
+        let index = points.partition_point(|p| p.source <= source);
+        let lo = if index == 0 {
+            WarpMarker {
+                source: start,
+                target: 0.0,
+            }
+        } else {
+            points[index - 1]
+        };
+        let hi = points.get(index).copied().unwrap_or(WarpMarker {
+            source: end,
+            target: 1.0,
+        });
+        let span = hi.source - lo.source;
+        if span <= 0.0 {
+            return 0.0;
+        }
+        (lo.target + (source - lo.source) / span * (hi.target - lo.target)).clamp(0.0, 1.0)
+    }
+
     /// Returns absolute source position and source advance per normalized musical unit.
     pub fn map(&self, target: f64, start: f64, end: f64) -> (f64, f64) {
         let target = if target.is_finite() {

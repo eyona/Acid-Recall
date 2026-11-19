@@ -309,6 +309,12 @@ impl Sampler {
             } else {
                 (start as f64 + position) / frames as f64
             };
+            let musical = if !lane.warp && !lane.warp_markers.points().is_empty() {
+                lane.warp_markers
+                    .target_for_source(source, lane.start, lane.end)
+            } else {
+                musical
+            };
             Some(Playhead {
                 source: source.clamp(0.0, 1.0) as f32,
                 musical: musical as f32,
