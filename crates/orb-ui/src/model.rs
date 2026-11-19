@@ -264,6 +264,7 @@ impl Synth303 {
 /// The whole panel's state.
 #[derive(Clone, Debug)]
 pub struct Panel {
+    pub sampler_playheads: [Option<orb_engine::studio::sampler::Playhead>; 8],
     pub transport: Transport,
     pub rows: [Row; 4],
     /// The row with the focus 0..=3.
@@ -320,6 +321,7 @@ fn index_of(section: &str, prefix: &str) -> Option<usize> {
 impl Panel {
     pub fn new() -> Self {
         let mut p = Self {
+            sampler_playheads: [None; 8],
             transport: Transport::default(),
             rows: Default::default(),
             focus: 0,

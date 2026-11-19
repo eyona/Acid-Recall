@@ -138,8 +138,12 @@ jobs:
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
 
-          ## Latest changes — 18 November 2026
+          ## Latest changes — 19 November 2026
 
+          - **Sampler playheads:** live source heads on the rack and detailed editor,
+            plus a musical-time head on the WARP grid. Includes audition, reverse and loops.
+          - **More knobs:** Delay Steps and per-sample Pitch, Level and Reverb now use
+            knobs with Shift fine adjustment. Existing MIDI assignments remain valid.
           - **Delay timing on the rack:** STEPS (1–32) and STRAIGHT / TRIPLET, with MIDI
             Learn. The detailed editor's unresponsive step controls are fixed.
           - **Sampler WARP:** fit IN/OUT to the chosen Beats. MARKERS / GRID provides

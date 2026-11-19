@@ -87,10 +87,21 @@ rapid requests keep the latest prepared response queued behind the current fade.
 PCF, Delay, Distortion and Compressor retain their existing sound and routing. Click their
 cards to edit all their controls, including PCF faders/pattern/mode. The Delay card now
 exposes **STEPS (1–32)** and **STRAIGHT / TRIPLET** directly, alongside Pan and Feedback.
-Drag STEPS or double-click it to type a value. The detailed editor uses the same controls;
+Turn the STEPS knob; hold Shift for fine adjustment. The detailed editor uses the same controls;
 its formerly unresponsive step buttons are fixed. Both timing controls support MIDI Learn.
 
 ## Sampler — eight lanes, up to 64 bars per lane
+
+Each selected sample has **PITCH**, **LEVEL** and **REVERB** knobs on the rack. Drag
+vertically, with **Shift** for fine adjustment. Pitch uses whole semitones; Level and
+Reverb remain continuous. Right-click MIDI Learn and saved assignments are unchanged.
+
+A white **playhead** follows the most recently triggered active voice in the selected
+lane. The rack and detailed sampler editor show its position in the original sample;
+the WARP editor shows its corresponding position on the musical grid. Reverse, trim,
+pitch, warp markers, looping and audition follow the engine's playback position. The
+head disappears when playback of that lane ends, is stopped or its sample is removed.
+Audition keeps the head moving even when the sequencer is stopped or the sample is silent.
 
 ### WARP: beat matching, musical grid and local stretch markers
 

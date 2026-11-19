@@ -305,6 +305,7 @@ pub struct Link {
     saved: Option<SavedBlocks>,
     /// The gain-reduction LEDs [`Link::moving`] saw last.
     shown_gr: Option<[u8; 9]>,
+    shown_sampler: [Option<orb_engine::studio::sampler::Playhead>; 8],
 }
 
 /// The device parameters the original's save writes for a song in song mode, as the engine
@@ -362,6 +363,7 @@ impl Link {
             loaded_at: None,
             saved: None,
             shown_gr: None,
+            shown_sampler: [None; 8],
         };
         (link, audio)
     }
@@ -400,11 +402,15 @@ impl Link {
         let s = self.player.snapshot();
         let (playing, frames) = (s.playing, s.frames);
         let sampler_lit = s.sampler_meter.iter().any(|&v| v != 0);
+        let sampler_moving = s.sampler_playheads.iter().any(Option::is_some)
+            || self.shown_sampler != s.sampler_playheads;
+        self.shown_sampler = s.sampler_playheads;
         // the compressor's reduction holds its last value in silence: it moves only when it
         // changes
         let gr_moved = self.shown_gr.replace(panel.gr_leds) != Some(panel.gr_leds);
         playing
             || sampler_lit
+            || sampler_moving
             || frames <= mark
             || !self.backlog.is_empty()
             || panel.meters.values().any(|&m| m > 0)
@@ -921,6 +927,7 @@ impl Link {
     /// Takes the engine's state into the panel.
     pub fn follow(&mut self, panel: &mut Panel) {
         let s = *self.player.snapshot();
+        panel.sampler_playheads = s.sampler_playheads;
         self.refresh_tracks();
         // the meters and the running lights follow every call
         for c in 0..4 {

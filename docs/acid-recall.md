@@ -21,8 +21,11 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
-## Latest preview — 18 November 2026
+## Latest preview — 19 November 2026
 
+- **Sampler playheads and knobs:** live source-position heads on the rack and sampler
+  editor, plus a musical-position head in the WARP grid. Pitch, Level and Reverb per sample
+  and Delay Steps now use knobs, with Shift for fine adjustment and existing MIDI mappings.
 - **Delay timing on the rack:** STEPS (1–32) and STRAIGHT / TRIPLET are directly accessible,
   MIDI-assignable and shared with the corrected detailed editor.
 - **Sampler WARP grid:** fit the trimmed sample to Beats, then use MARKERS / GRID to place

@@ -39,6 +39,37 @@ fn setup() -> (App, Audio, Context) {
     (app, audio, ctx)
 }
 
+#[test]
+fn silent_sampler_audition_publishes_positions_and_keeps_ui_repainting() {
+    let (mut app, mut audio, _) = setup();
+    app.studio_command(Command::StudioWave {
+        lane: 0,
+        wave: Some(Box::new(Wave {
+            frames: vec![[0.0; 2]; 100000],
+        })),
+    });
+    app.studio_command(Command::StudioAudition(0));
+    audio.render_i16(&mut vec![0; CALL_FRAMES * 4]);
+    app.link.as_mut().unwrap().sync(&mut app.panel);
+    let first = app.panel.sampler_playheads[0].unwrap();
+    assert!(!app.panel.transport.playing);
+    assert!(app.link.as_mut().unwrap().moving(&app.panel));
+    audio.render_i16(&mut vec![0; CALL_FRAMES * 4]);
+    app.link.as_mut().unwrap().sync(&mut app.panel);
+    assert!(app.panel.sampler_playheads[0].unwrap().source > first.source);
+    app.studio_command(Command::StudioWave {
+        lane: 0,
+        wave: None,
+    });
+    audio.render_i16(&mut vec![0; CALL_FRAMES * 4]);
+    app.link.as_mut().unwrap().sync(&mut app.panel);
+    assert!(app.panel.sampler_playheads[0].is_none());
+    assert!(
+        app.link.as_mut().unwrap().moving(&app.panel),
+        "clear the final drawn head"
+    );
+}
+
 fn finish(app: &mut App, audio: &mut Audio, ctx: &Context) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while app.studio.busy() {

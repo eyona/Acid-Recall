@@ -490,6 +490,9 @@ impl App {
                         self.studio.waveform_epoch,
                         &mut self.studio.wave_views[selected],
                     );
+                    if let Some(head) = self.panel.sampler_playheads[selected] {
+                        draw_playhead(ui, response.rect, head.source);
+                    }
                     let minimum = 2.0 / wave.frames.len().max(2) as f64;
                     if response.double_clicked() {
                         lane.start = 0.0;
@@ -826,6 +829,19 @@ impl App {
             self.studio.fx = None;
         }
     }
+}
+
+pub(super) fn draw_playhead(ui: &Ui, rect: egui::Rect, position: f32) {
+    if !position.is_finite() {
+        return;
+    }
+    let x = rect.left() + position.clamp(0.0, 1.0) * rect.width();
+    ui.painter().line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+        Stroke::new(2.0, Color32::WHITE),
+    );
+    ui.painter()
+        .circle_filled(egui::pos2(x, rect.top() + 3.0), 3.0, Color32::WHITE);
 }
 
 pub(super) fn waveform(

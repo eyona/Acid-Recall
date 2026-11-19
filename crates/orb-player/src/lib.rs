@@ -367,6 +367,7 @@ impl LiveBlock {
 pub struct Snapshot {
     /// Sampler stereo bus peaks after its global fader/insert, before the master fader.
     pub sampler_meter: [u8; 2],
+    pub sampler_playheads: [Option<orb_engine::studio::sampler::Playhead>; 8],
     pub closed_hat_level: u8,
     /// Current TB gain reductions, in percent, from the optional sidechain processor.
     pub sidechain_reduction: [u8; 2],
@@ -1120,6 +1121,9 @@ impl Audio {
             .studio
             .as_ref()
             .map_or([0; 2], |studio| studio.sampler_meter());
+        s.sampler_playheads = f.studio.as_ref().map_or([None; 8], |studio| {
+            studio.sampler.playheads(&studio.settings.lanes)
+        });
         s.frames = self.frames;
         s.generation = self.generation;
         s.pending = self.pending.is_some();

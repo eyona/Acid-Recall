@@ -85,6 +85,110 @@ fn float_knob(
     });
 }
 
+fn compact_knob(
+    ui: &mut Ui,
+    value: &mut f64,
+    range: std::ops::RangeInclusive<f64>,
+    label: &str,
+    id: &str,
+    integer: bool,
+) -> egui::Response {
+    let (lo, hi) = (*range.start(), *range.end());
+    let (rect, mut response) =
+        ui.allocate_exact_size(Vec2::new(58.0, 52.0), Sense::click_and_drag());
+    let drag = ui.make_persistent_id((id, "knob-origin"));
+    let now = ui.input(|i| i.time);
+    let state = ui.data(|d| d.get_temp::<(f64, f64)>(drag));
+    if response.drag_started_by(egui::PointerButton::Primary)
+        && state.is_none_or(|(_, time)| time != now)
+    {
+        ui.data_mut(|d| d.insert_temp(drag, (*value, f64::NEG_INFINITY)));
+    }
+    if response.dragged_by(egui::PointerButton::Primary) {
+        let (base, consumed) = ui
+            .data(|d| d.get_temp::<(f64, f64)>(drag))
+            .unwrap_or((*value, f64::NEG_INFINITY));
+        let fine = ui.input(|i| if i.modifiers.shift { 0.1 } else { 1.0 });
+        let delta = response.drag_delta().y;
+        let next = if consumed == now {
+            base
+        } else {
+            (base - f64::from(delta) * (hi - lo) * fine / 160.0).clamp(lo, hi)
+        };
+        ui.data_mut(|d| d.insert_temp(drag, (next, now)));
+        let next = if integer { next.round() } else { next };
+        if next != *value {
+            *value = next;
+            response.mark_changed();
+        }
+    }
+    let center = rect.center_top() + Vec2::new(0.0, 14.0);
+    let angle = -std::f32::consts::PI * 1.25
+        + ((*value - lo) / (hi - lo)) as f32 * std::f32::consts::PI * 1.5;
+    ui.painter()
+        .circle_filled(center, 11.0, Color32::from_gray(22));
+    ui.painter()
+        .circle_stroke(center, 11.0, Stroke::new(1.5, Color32::from_gray(80)));
+    ui.painter().line_segment(
+        [center, center + Vec2::angled(angle) * 9.0],
+        Stroke::new(1.5, ACID),
+    );
+    ui.painter().text(
+        rect.center_top() + Vec2::new(0.0, 33.0),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(9.0),
+        Color32::LIGHT_GRAY,
+    );
+    let text = if integer {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.2}")
+    };
+    ui.painter().text(
+        rect.center_bottom(),
+        Align2::CENTER_BOTTOM,
+        text,
+        FontId::monospace(9.0),
+        Color32::LIGHT_GRAY,
+    );
+    response.midi_menu(ui, id).on_hover_text(format!(
+        "{label}: drag vertically; Shift for fine adjustment"
+    ))
+}
+
+fn sample_knobs(ui: &mut Ui, lane: &mut Lane, prefix: &str) -> [Rect; 3] {
+    let mut pitch = f64::from(lane.pitch);
+    let p = compact_knob(
+        ui,
+        &mut pitch,
+        -24.0..=24.0,
+        "PITCH",
+        &format!("{prefix}.pitch"),
+        true,
+    );
+    if p.changed() {
+        lane.pitch = pitch as i8;
+    }
+    let l = compact_knob(
+        ui,
+        &mut lane.gain,
+        0.0..=2.0,
+        "LEVEL",
+        &format!("{prefix}.level"),
+        false,
+    );
+    let r = compact_knob(
+        ui,
+        &mut lane.send,
+        0.0..=1.0,
+        "REVERB",
+        &format!("{prefix}.send"),
+        false,
+    );
+    [p.rect, l.rect, r.rect]
+}
+
 pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
     ui.horizontal_wrapped(|ui| {
         let mut on = lane.gater_source != 0;
@@ -193,18 +297,11 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
 pub(super) fn delay_timing(ui: &mut Ui, panel: &mut crate::model::Panel) -> [Rect; 3] {
     let mut rects = [Rect::NOTHING; 3];
     ui.horizontal_wrapped(|ui| {
-        let mut steps = panel.display("delay.steps").unwrap_or(3);
-        let response = ui
-            .add(
-                crate::midi::drag_value(ui, &mut steps)
-                    .range(1..=32)
-                    .prefix("STEPS "),
-            )
-            .midi_menu(ui, "delay.steps")
-            .on_hover_text("Delay length in steps (1-32); drag or double-click to type");
+        let mut steps = f64::from(panel.display("delay.steps").unwrap_or(3));
+        let response = compact_knob(ui, &mut steps, 1.0..=32.0, "STEPS", "delay.steps", true);
         rects[0] = response.rect;
         if response.changed() {
-            panel.set_delay_steps(steps);
+            panel.set_delay_steps(steps as i32);
         }
     });
     ui.horizontal_wrapped(|ui| {
@@ -552,6 +649,9 @@ impl App {
                                     self.studio.waveform_epoch,
                                     &mut self.studio.wave_views[selected],
                                 );
+                                if let Some(head) = self.panel.sampler_playheads[selected] {
+                                    super::editors::draw_playhead(ui, response.rect, head.source);
+                                }
                                 let minimum = 2.0 / wave.frames.len().max(2) as f64;
                                 if response.double_clicked() {
                                     lane.start = 0.0;
@@ -631,26 +731,7 @@ impl App {
                                 {
                                     lane.reverse = !lane.reverse;
                                 }
-                                ui.add(
-                                    crate::midi::drag_value(ui, &mut lane.pitch)
-                                        .range(-24..=24)
-                                        .prefix("Pitch "),
-                                )
-                                .midi_menu(ui, &format!("sampler{}.pitch", selected + 1));
-                                ui.add(
-                                    crate::midi::drag_value(ui, &mut lane.gain)
-                                        .range(0.0..=2.0)
-                                        .speed(0.005)
-                                        .prefix("Level "),
-                                )
-                                .midi_menu(ui, &format!("sampler{}.level", selected + 1));
-                                ui.add(
-                                    crate::midi::drag_value(ui, &mut lane.send)
-                                        .range(0.0..=1.0)
-                                        .speed(0.005)
-                                        .prefix("REV "),
-                                )
-                                .midi_menu(ui, &format!("sampler{}.send", selected + 1));
+                                sample_knobs(ui, lane, &format!("sampler{}", selected + 1));
                             });
                             let frames =
                                 self.studio.waves[selected].as_ref().map(|w| w.frames.len());
@@ -835,7 +916,11 @@ impl App {
                             let old = self.panel.knob(&id);
                             let mut value = f64::from(old) / 1000.0;
                             ui.push_id(&id, |ui| {
-                                float_knob(ui, &mut value, 0.0..=1.0, label, &id);
+                                if section == "delay" {
+                                    compact_knob(ui, &mut value, 0.0..=1.0, label, &id, false);
+                                } else {
+                                    float_knob(ui, &mut value, 0.0..=1.0, label, &id);
+                                }
                             });
                             let next = (value * 1000.0).round() as i32;
                             if next != old {
@@ -884,6 +969,99 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sample_knobs_keep_pitch_discrete_and_shift_does_not_jump_during_drag() {
+        let ctx = egui::Context::default();
+        let mut lane = Lane::default();
+        let frame = |lane: &mut Lane, events| {
+            let mut rects = [Rect::NOTHING; 3];
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(500.0, 400.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.horizontal(|ui| {
+                        rects = sample_knobs(ui, lane, "sampler1");
+                    });
+                },
+            );
+            out.textures_delta.clear();
+            rects
+        };
+        let rects = frame(&mut lane, vec![]);
+        let event = |pos, button, pressed| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: Default::default(),
+        };
+        let start = rects[1].center();
+        let end = start - Vec2::new(0.0, 80.0);
+        frame(
+            &mut lane,
+            vec![
+                egui::Event::PointerMoved(start),
+                event(start, egui::PointerButton::Primary, true),
+            ],
+        );
+        frame(&mut lane, vec![egui::Event::PointerMoved(end)]);
+        let value = lane.gain;
+        assert!((value - 1.7).abs() < 1e-9);
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        frame(&mut lane, vec![egui::Event::ModifiersChanged(shift)]);
+        assert_eq!(lane.gain, value);
+        let fine = end - Vec2::new(0.0, 16.0);
+        frame(&mut lane, vec![egui::Event::PointerMoved(fine)]);
+        assert!((lane.gain - value - 0.02).abs() < 1e-9);
+        frame(
+            &mut lane,
+            vec![
+                event(fine, egui::PointerButton::Primary, false),
+                egui::Event::ModifiersChanged(Default::default()),
+            ],
+        );
+        for index in [0, 2] {
+            let pos = rects[index].center();
+            let end = pos - Vec2::new(0.0, 400.0);
+            frame(
+                &mut lane,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    event(pos, egui::PointerButton::Primary, true),
+                ],
+            );
+            frame(&mut lane, vec![egui::Event::PointerMoved(end)]);
+            frame(
+                &mut lane,
+                vec![event(end, egui::PointerButton::Primary, false)],
+            );
+        }
+        assert_eq!(lane.pitch, 24);
+        assert_eq!(lane.send, 1.0);
+        let before = lane.clone();
+        let pos = rects[1].center();
+        frame(
+            &mut lane,
+            vec![
+                egui::Event::PointerMoved(pos),
+                event(pos, egui::PointerButton::Secondary, true),
+            ],
+        );
+        frame(
+            &mut lane,
+            vec![event(pos, egui::PointerButton::Secondary, false)],
+        );
+        assert_eq!(lane, before);
+    }
+
+    #[test]
     fn delay_steps_and_mode_controls_emit_the_real_delay_messages() {
         let ctx = egui::Context::default();
         let mut panel = crate::model::Panel::new();
@@ -923,7 +1101,7 @@ mod tests {
             assert_eq!(panel.switch("delay.triplet"), value);
         }
         let start = rects[0].center();
-        let end = start + Vec2::new(20.0, 0.0);
+        let end = start + Vec2::new(0.0, -20.0);
         frame(
             &mut panel,
             vec![egui::Event::PointerMoved(start), event(start, true)],

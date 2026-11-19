@@ -10,6 +10,14 @@ pub use markers::{MAX_WARP_MARKERS, WarpMarker, WarpMarkers};
 pub const LANES: usize = 8;
 pub const STEPS: usize = 64 * 16;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Playhead {
+    /// Position in the original whole sample, for source waveforms.
+    pub source: f32,
+    /// Position on the forward musical grid; reverse playback travels right to left.
+    pub musical: f32,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Mode {
     #[default]
@@ -262,6 +270,50 @@ impl Sampler {
         if lane < LANES {
             self.audition[lane] = true;
         }
+    }
+
+    /// The most recently triggered active voice in each lane. No allocation or audio mutation.
+    pub fn playheads(&self, lanes: &[Lane; LANES]) -> [Option<Playhead>; LANES] {
+        std::array::from_fn(|i| {
+            let wave = self.waves[i].as_ref()?;
+            let lane = &lanes[i];
+            let frames = wave.frames.len();
+            let start = (lane.start * frames as f64) as usize;
+            let end = ((lane.end * frames as f64) as usize).min(frames);
+            let length = end.saturating_sub(start);
+            if length < 2 {
+                return None;
+            }
+            let voice = self.voices[i]
+                .iter()
+                .filter(|v| v.active)
+                .min_by_key(|v| v.age)?;
+            let position = if lane.mode == Mode::Loop {
+                voice.position.rem_euclid(length as f64)
+            } else {
+                if voice.position >= length as f64 {
+                    return None;
+                }
+                voice.position
+            };
+            let progress = position / length as f64;
+            let musical = if lane.reverse {
+                1.0 - progress
+            } else {
+                progress
+            };
+            let source = if lane.warp && !lane.warp_markers.points().is_empty() {
+                lane.warp_markers.map(musical, lane.start, lane.end).0
+            } else if lane.reverse {
+                (end as f64 - 1.0 - position) / frames as f64
+            } else {
+                (start as f64 + position) / frames as f64
+            };
+            Some(Playhead {
+                source: source.clamp(0.0, 1.0) as f32,
+                musical: musical as f32,
+            })
+        })
     }
 
     fn trigger(&mut self, lane: usize, velocity: u8, lanes: &[Lane; LANES]) {

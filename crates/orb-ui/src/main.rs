@@ -339,6 +339,10 @@ fn main() -> eframe::Result {
                 app.studio.waves[0] =
                     Some(Arc::new(orb_engine::studio::audio_file::Wave { frames }));
                 app.studio.names[0] = "Demo waveform".into();
+                app.panel.sampler_playheads[0] = Some(orb_engine::studio::sampler::Playhead {
+                    source: 0.4,
+                    musical: 0.4,
+                });
                 for step in [0, 4, 8, 12] {
                     app.studio.settings.lanes[0].steps[step] = 100;
                 }
@@ -372,6 +376,7 @@ fn main() -> eframe::Result {
                         let lane = &mut app.studio.settings.lanes[0];
                         lane.warp = true;
                         lane.warp_grid = true;
+                        app.panel.sampler_playheads[0].as_mut().unwrap().musical = 0.5;
                         let _ = lane.warp_markers.insert(0.5, 0.625, 0.0, 1.0);
                     }
                 }

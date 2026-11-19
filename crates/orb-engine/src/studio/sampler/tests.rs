@@ -1,6 +1,50 @@
 use super::*;
 
 #[test]
+fn playheads_follow_the_latest_voice_reverse_warp_loop_and_stop() {
+    let (mut sampler, mut lanes) = setup(Mode::OneShot);
+    assert_eq!(sampler.playheads(&lanes), [None; LANES]);
+    let render = |sampler: &mut Sampler, lanes: &[Lane; LANES]| {
+        sampler.process(
+            lanes,
+            0.0,
+            120.0 * 192.0 / (60.0 * 44100.0),
+            false,
+            &mut [[0.0; 64]; 2],
+            &mut [[0.0; 64]; 2],
+        );
+    };
+    sampler.audition(0);
+    render(&mut sampler, &lanes);
+    let first = sampler.playheads(&lanes)[0].unwrap();
+    assert!((f64::from(first.source) - 64.0 / 50000.0).abs() < 1e-7);
+    render(&mut sampler, &lanes);
+    assert!(sampler.playheads(&lanes)[0].unwrap().source > first.source);
+    sampler.audition(0);
+    render(&mut sampler, &lanes);
+    assert_eq!(sampler.playheads(&lanes)[0], Some(first));
+    sampler.stop();
+    assert_eq!(sampler.playheads(&lanes), [None; LANES]);
+    lanes[0].reverse = true;
+    lanes[0].warp = true;
+    lanes[0].warp_grid = true;
+    lanes[0].warp_markers.insert(0.5, 0.75, 0.0, 1.0).unwrap();
+    sampler.audition(0);
+    render(&mut sampler, &lanes);
+    let reverse = sampler.playheads(&lanes)[0].unwrap();
+    assert!(reverse.source > 0.99 && reverse.musical > 0.99);
+    render(&mut sampler, &lanes);
+    assert!(sampler.playheads(&lanes)[0].unwrap().source < reverse.source);
+    lanes[0].mode = Mode::Loop;
+    sampler.voices[0][0].position = 50001.0;
+    let head = sampler.playheads(&lanes)[0].unwrap();
+    assert!((0.0..=1.0).contains(&head.source));
+    assert!((0.0..=1.0).contains(&head.musical));
+    sampler.replace(0, None);
+    assert_eq!(sampler.playheads(&lanes), [None; LANES]);
+}
+
+#[test]
 fn warp_markers_keep_order_endpoints_and_survive_serialization() {
     let mut map = WarpMarkers::default();
     assert_eq!(map.insert(0.4, 0.6, 0.1, 0.9), Some(0));

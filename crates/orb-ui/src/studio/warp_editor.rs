@@ -310,7 +310,7 @@ impl App {
                     .id_salt(("warp-scroll", index))
                     .show(ui, |ui| {
                         ui.add_enabled_ui(grid_mode, |ui| {
-                            marker_waveform(
+                            let response = marker_waveform(
                                 ui,
                                 lane,
                                 &wave.frames,
@@ -319,6 +319,9 @@ impl App {
                                 snap,
                                 &mut selected,
                             );
+                            if let Some(head) = self.panel.sampler_playheads[index] {
+                                super::editors::draw_playhead(ui, response.rect, head.musical);
+                            }
                         });
                     });
                 ui.horizontal_wrapped(|ui| {
