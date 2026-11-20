@@ -384,11 +384,16 @@ pub(super) fn warp_controls(
     edit
 }
 
+struct LaneRowOptions {
+    active: bool,
+    can_unload: bool,
+}
+
 fn lane_row(
     ui: &mut Ui,
     index: usize,
     name: &str,
-    active: bool,
+    options: LaneRowOptions,
     lane: &mut Lane,
     selected: &mut usize,
     row_width: f32,
@@ -404,7 +409,7 @@ fn lane_row(
             ui.painter().rect_filled(
                 rect,
                 3.0,
-                if active {
+                if options.active {
                     Color32::from_rgb(67, 78, 46)
                 } else {
                     Color32::from_gray(43)
@@ -421,9 +426,20 @@ fn lane_row(
                     Color32::WHITE
                 },
             );
-            if response.on_hover_text(name).clicked() {
+            let response = response.on_hover_text(name);
+            if response.clicked() {
                 *selected = index;
             }
+            response.context_menu(|ui| {
+                if ui
+                    .add_enabled(options.can_unload, egui::Button::new("Unload sample"))
+                    .clicked()
+                {
+                    ui.ctx()
+                        .data_mut(|d| d.insert_temp(egui::Id::unique("sampler-unload"), index));
+                    ui.close();
+                }
+            });
             let solo = ui.add_sized([20.0, 20.0], egui::Button::new("S").selected(lane.solo));
             regions[1] = solo.rect;
             if solo
@@ -475,7 +491,7 @@ impl App {
             FontId::proportional(12.0 * scale),
             Color32::from_rgb(133, 138, 136),
         );
-        ui.add_enabled_ui(active, |ui| {
+        ui.add_enabled_ui(active && !self.studio.history_restoring, |ui| {
             let bus = &mut self.studio.settings.sampler_bus;
             if crate::graphite_rack::machine_power_button(
                 ui,
@@ -591,6 +607,9 @@ impl App {
             egui::pos2(mixer.left() - 6.0, rect.bottom()),
         );
         surface(ui, rect, "graphite-sampler", |ui| {
+            if self.studio.history_restoring {
+                ui.disable();
+            }
             egui::ScrollArea::vertical()
                 .id_salt("sampler-rack-scroll")
                 .max_height(ui.available_height())
@@ -599,6 +618,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.colored_label(ACID, egui::RichText::new("SAMPLER").strong());
                         ui.small("8 LANES / 64 BARS");
+                        self.sampler_history_buttons(ui);
                         if ui.add_enabled(!busy, egui::Button::new("LOAD")).clicked() {
                             load = Some(selected);
                         }
@@ -629,7 +649,10 @@ impl App {
                                     ui,
                                     i,
                                     &self.studio.names[i],
-                                    i == selected,
+                                    LaneRowOptions {
+                                        can_unload: self.studio.waves[i].is_some() && !busy,
+                                        active: i == selected,
+                                    },
                                     lane,
                                     &mut self.studio.selected,
                                     rect.width() * 0.22,
@@ -811,6 +834,11 @@ impl App {
         if let Some(lane) = load {
             self.studio_load_wave(&context, lane);
         }
+        if let Some(lane) =
+            context.data_mut(|d| d.remove_temp::<usize>(egui::Id::unique("sampler-unload")))
+        {
+            self.sampler_unload(lane);
+        }
         if audition {
             self.studio_command(Command::StudioAudition(selected));
         }
@@ -967,6 +995,77 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn right_click_sample_name_opens_unload_for_that_lane_without_selecting_it() {
+        fn text_position(shape: &egui::Shape) -> Option<egui::Pos2> {
+            match shape {
+                egui::Shape::Text(t) if t.galley.text() == "Unload sample" => {
+                    Some(t.pos + t.galley.size() * 0.5)
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(text_position),
+                _ => None,
+            }
+        }
+        let ctx = egui::Context::default();
+        let mut lane = Lane::default();
+        let mut selected = 0;
+        let mut frame = |events| {
+            let mut name = Rect::NOTHING;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(500.0, 400.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    name = lane_row(
+                        ui,
+                        4,
+                        "Loaded.wav",
+                        LaneRowOptions {
+                            can_unload: true,
+                            active: false,
+                        },
+                        &mut lane,
+                        &mut selected,
+                        240.0,
+                    )[0];
+                },
+            );
+            out.textures_delta.clear();
+            (
+                name,
+                out.shapes.iter().find_map(|s| text_position(&s.shape)),
+            )
+        };
+        let pos = frame(vec![]).0.center();
+        let click = |pos, button, pressed| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(vec![
+            egui::Event::PointerMoved(pos),
+            click(pos, egui::PointerButton::Secondary, true),
+        ]);
+        frame(vec![click(pos, egui::PointerButton::Secondary, false)]);
+        let option = frame(vec![]).1.expect("Unload menu must be visible");
+        frame(vec![
+            egui::Event::PointerMoved(option),
+            click(option, egui::PointerButton::Primary, true),
+        ]);
+        frame(vec![click(option, egui::PointerButton::Primary, false)]);
+        assert_eq!(selected, 0);
+        assert_eq!(
+            ctx.data(|d| d.get_temp::<usize>(egui::Id::unique("sampler-unload"))),
+            Some(4)
+        );
+    }
 
     #[test]
     fn sample_knobs_keep_pitch_discrete_and_shift_does_not_jump_during_drag() {
@@ -1199,7 +1298,10 @@ mod tests {
                         ui,
                         4,
                         "A very long sample name to truncate.wav",
-                        false,
+                        LaneRowOptions {
+                            can_unload: true,
+                            active: false,
+                        },
                         &mut lane,
                         &mut selected,
                         240.0,
@@ -1251,7 +1353,10 @@ mod tests {
                         ui,
                         index,
                         "A long imported sample filename.wav",
-                        false,
+                        LaneRowOptions {
+                            can_unload: true,
+                            active: false,
+                        },
                         lane,
                         &mut selected,
                         240.0,

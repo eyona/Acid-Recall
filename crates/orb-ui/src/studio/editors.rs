@@ -114,6 +114,7 @@ impl App {
     }
 
     pub(crate) fn studio_ui(&mut self, ctx: &Context) {
+        self.sampler_history_keys(ctx);
         if self.studio.reverb_open {
             self.reverb_editor(ctx);
         }
@@ -300,11 +301,15 @@ impl App {
             .min_width(720.0)
             .vscroll(true)
             .show(ctx, |ui| {
+                if self.studio.history_restoring {
+                    ui.disable();
+                }
                 style(ui);
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
                 ui.horizontal(|ui| {
                     ui.heading(egui::RichText::new("SAMPLER").color(ACCENT));
                     ui.label("8 STEREO LANES / 64 BARS");
+                    self.sampler_history_buttons(ui);
                     if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
                         self.panel.press(
                             if playing {
@@ -341,15 +346,25 @@ impl App {
                             for i in 0..8 {
                                 let active = i == selected;
                                 let label = format!("{:02}  {}", i + 1, self.studio.names[i]);
-                                if ui
-                                    .add_sized(
-                                        [190.0, 26.0],
-                                        egui::Button::new(label).selected(active),
-                                    )
-                                    .clicked()
-                                {
+                                let name_response = ui.add_sized(
+                                    [190.0, 26.0],
+                                    egui::Button::new(label).selected(active),
+                                );
+                                if name_response.clicked() {
                                     self.studio.selected = i;
                                 }
+                                name_response.context_menu(|ui| {
+                                    if ui
+                                        .add_enabled(
+                                            !busy && self.studio.waves[i].is_some(),
+                                            egui::Button::new("Unload sample"),
+                                        )
+                                        .clicked()
+                                    {
+                                        unload = Some(i);
+                                        ui.close();
+                                    }
+                                });
                                 let lane = &mut self.studio.settings.lanes[i];
                                 ui.checkbox(&mut lane.muted, "")
                                     .midi_menu(ui, &format!("sampler{}.mute", i + 1));
@@ -722,11 +737,7 @@ impl App {
             self.studio_command(Command::StudioAudition(lane));
         }
         if let Some(lane) = unload {
-            self.studio.waves[lane] = None;
-            self.studio.names[lane] = format!("Sample {:02}", lane + 1);
-            self.studio.changed();
-            self.doc.modified = true;
-            self.studio_command(Command::StudioWave { lane, wave: None });
+            self.sampler_unload(lane);
         }
         if playing {
             ctx.request_repaint_after(crate::app::METER_FRAME);

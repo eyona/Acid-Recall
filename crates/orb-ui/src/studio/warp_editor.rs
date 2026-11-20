@@ -207,17 +207,13 @@ fn marker_waveform(
     }
     for (index, point) in lane.warp_markers.points().iter().enumerate() {
         let x = rect.left() + point.target as f32 * rect.width();
-        let color = if *selected == Some(index) {
-            Color32::WHITE
-        } else {
-            ACID
-        };
+        let color = ACID;
         ui.painter().line_segment(
             [
                 egui::pos2(x, rect.top() + 23.0),
                 egui::pos2(x, rect.bottom()),
             ],
-            Stroke::new(2.0, color),
+            Stroke::new(if *selected == Some(index) { 3.0 } else { 1.5 }, color),
         );
         ui.painter().text(
             egui::pos2(x + 4.0, rect.bottom() - 4.0),
@@ -250,6 +246,11 @@ impl App {
             .data(|d| d.get_temp::<(f32, bool, Option<usize>)>(id))
             .unwrap_or((1.0, true, None));
         let before = self.studio.settings.lanes[index].clone();
+        let suggestions = self.studio.proposals[index]
+            .as_ref()
+            .filter(|p| p.matches(&self.studio, index))
+            .map(|p| p.sources.clone());
+        let mut detect = false;
         let mut open = true;
         let mut audition = false;
         egui::Window::new(format!("WARP / {}", self.studio.names[index]))
@@ -259,7 +260,22 @@ impl App {
             .min_width(480.0)
             .resizable(true)
             .show(ctx, |ui| {
+                if self.studio.history_restoring {
+                    ui.disable();
+                }
+                ui.horizontal_wrapped(|ui| {
+                    self.sampler_history_buttons(ui);
+                    detect = ui
+                        .add_enabled(!self.studio.busy(), egui::Button::new("DETECT TRANSIENTS"))
+                        .clicked();
+                    if self.studio.busy() {
+                        ui.spinner();
+                    }
+                });
                 let lane = &mut self.studio.settings.lanes[index];
+                if selected.is_some_and(|i| i >= lane.warp_markers.points().len()) {
+                    selected = None;
+                }
                 let peaks = &mut self.studio.warp_peaks[index];
                 peaks.prepare(self.studio.waveform_epoch, &wave.frames);
                 ui.label(
@@ -305,6 +321,26 @@ impl App {
                         );
                     });
                 }
+                if let Some(sources) = &suggestions {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!("{} onset proposals (dim green)", sources.len()));
+                        if ui
+                            .add_enabled(
+                                grid_mode
+                                    && !sources.is_empty()
+                                    && lane.warp_markers.points().len() < MAX_WARP_MARKERS,
+                                egui::Button::new("APPLY SUGGESTIONS"),
+                            )
+                            .clicked()
+                        {
+                            super::transients::apply(lane, sources);
+                            self.studio.proposals[index] = None;
+                        }
+                        if ui.button("Dismiss").clicked() {
+                            self.studio.proposals[index] = None;
+                        }
+                    });
+                }
                 let width = ui.available_width().max(440.0) * zoom;
                 egui::ScrollArea::horizontal()
                     .id_salt(("warp-scroll", index))
@@ -319,6 +355,22 @@ impl App {
                                 snap,
                                 &mut selected,
                             );
+                            if let Some(sources) = &suggestions {
+                                for &source in sources {
+                                    let target = lane
+                                        .warp_markers
+                                        .target_for_source(source, lane.start, lane.end);
+                                    let x = response.rect.left()
+                                        + target as f32 * response.rect.width();
+                                    ui.painter().line_segment(
+                                        [
+                                            egui::pos2(x, response.rect.top()),
+                                            egui::pos2(x, response.rect.bottom()),
+                                        ],
+                                        Stroke::new(1.0, ACID.gamma_multiply(0.35)),
+                                    );
+                                }
+                            }
                             if let Some(head) = self.panel.sampler_playheads[index] {
                                 super::editors::draw_playhead(ui, response.rect, head.musical);
                             }
@@ -370,20 +422,15 @@ impl App {
                 );
             });
         if self.studio.settings.lanes[index] != before {
-            // Keep the no-marker fallback at the same musical length after deleting the last
-            // anchor.
-            if self.studio.settings.lanes[index].warp_grid
-                && let Some(bpm) =
-                    self.studio.settings.lanes[index].fitted_warp_bpm(wave.frames.len())
-            {
-                self.studio.settings.lanes[index].warp_bpm = bpm;
-            }
             self.studio.changed();
             self.doc.modified = true;
         }
         ctx.data_mut(|d| d.insert_temp(id, (zoom, snap, selected)));
         if audition {
             self.studio_command(Command::StudioAudition(index));
+        }
+        if detect {
+            self.sampler_detect(ctx, index);
         }
         if !open {
             self.studio.warp_editor = None;

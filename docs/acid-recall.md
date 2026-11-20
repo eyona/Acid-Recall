@@ -21,7 +21,13 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
-## Latest preview — 19 November 2026
+## Latest preview — 20 November 2026
+
+- **Safer sampler editing:** UNDO / REDO for sampler and WARP edits, including sample
+  loading and unloading. Right-click a sample name to **Unload sample**.
+- **WARP assistance:** acid-green anchors, a white playhead, and optional **DETECT
+  TRANSIENTS** suggestions. Review them before **APPLY SUGGESTIONS**; existing anchors stay.
+- **One Graphite interface:** the obsolete Mods menu is hidden in Studio.
 
 - **Sampler playheads and knobs:** live source-position heads on the rack and sampler
   editor, plus a musical-position head in the WARP grid. Pitch, Level and Reverb per sample

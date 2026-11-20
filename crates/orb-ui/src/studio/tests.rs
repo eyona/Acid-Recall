@@ -5,6 +5,34 @@ use orb_engine::tables::Tables;
 use orb_player::{Audio, CALL_FRAMES};
 
 #[test]
+fn graphite_navigation_has_no_mods_menu() {
+    fn has_mods(shape: &egui::Shape) -> bool {
+        match shape {
+            egui::Shape::Text(t) => t.galley.text() == "Mods",
+            egui::Shape::Vec(items) => items.iter().any(has_mods),
+            _ => false,
+        }
+    }
+    let ctx = Context::default();
+    let mut app = App::new(Panel::new(), None);
+    app.menu = true;
+    app.studio.modern = true;
+    app.studio.ready = true;
+    let mut out = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1600.0, 1000.0),
+            )),
+            ..Default::default()
+        },
+        |ui| app.show(ui),
+    );
+    out.textures_delta.clear();
+    assert!(!out.shapes.iter().any(|s| has_mods(&s.shape)));
+}
+
+#[test]
 fn waveform_cache_remains_bounded_during_repeated_updates() {
     let frames = vec![[0.1, -0.2]; 44100 * 10];
     let mut cache = WaveformCache::default();
@@ -81,6 +109,42 @@ fn finish(app: &mut App, audio: &mut Audio, ctx: &Context) {
         );
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
+}
+
+#[test]
+fn unloading_can_be_undone_and_redone_with_the_original_pcm_and_warp_settings() {
+    let (mut app, mut audio, ctx) = setup();
+    let wave = Arc::new(Wave {
+        frames: vec![[0.2, -0.1]; 10000],
+    });
+    app.studio.waves[0] = Some(wave.clone());
+    app.studio.names[0] = "Original.wav".into();
+    app.studio.settings.lanes[0].pitch = 7;
+    app.studio.settings.lanes[0]
+        .warp_markers
+        .insert(0.5, 0.6, 0.0, 1.0)
+        .unwrap();
+    app.sampler_history_reset();
+    app.sampler_unload(0);
+    app.studio_poll(&ctx);
+    assert!(app.studio.waves[0].is_none());
+    app.sampler_history_step(&ctx, false);
+    assert!(app.studio.history_restoring);
+    finish(&mut app, &mut audio, &ctx);
+    assert!(Arc::ptr_eq(app.studio.waves[0].as_ref().unwrap(), &wave));
+    assert_eq!(app.studio.names[0], "Original.wav");
+    assert_eq!(app.studio.settings.lanes[0].pitch, 7);
+    assert_eq!(app.studio.settings.lanes[0].warp_markers.points().len(), 1);
+    app.studio_command(Command::StudioAudition(0));
+    let mut out = vec![0; CALL_FRAMES * 4];
+    audio.render_i16(&mut out);
+    assert!(
+        out.iter().any(|&v| v != 0),
+        "undo must restore the actual player sample"
+    );
+    app.sampler_history_step(&ctx, true);
+    finish(&mut app, &mut audio, &ctx);
+    assert!(app.studio.waves[0].is_none());
 }
 
 #[test]

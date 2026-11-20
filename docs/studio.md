@@ -28,6 +28,9 @@ the right column. Per-machine DIST / PCF / COMP / REV switches share one visual 
 COMP MASTER stays visible in the transport and master strip; it uses the existing compressor
 bus selector, so selecting master compression moves that compressor from a machine to master.
 
+Studio keeps the Graphite interface fixed. The obsolete **Mods** menu and mod startup-sound
+option are hidden; color customization is not part of this preview.
+
 Each TB has a SIDECHAIN block below its routing buttons, with independent enable and depth.
 Bypass retains the depth. TR source, trigger voice and release remain shared, including
 sampler ducking. Select BD for kick pumping, or another native voice such as CH or OH.
@@ -103,6 +106,23 @@ pitch, warp markers, looping and audition follow the engine's playback position.
 head disappears when playback of that lane ends, is stopped or its sample is removed.
 Audition keeps the head moving even when the sequencer is stopped or the sample is silent.
 
+Right-click a sample's **name** in the rack or detailed editor and choose **Unload sample**
+to free that lane's audio. Its sequence and lane settings stay available for another sample.
+
+### Undo / Redo
+
+The sampler and WARP editor provide **UNDO / REDO** buttons. Keyboard shortcuts are
+**Ctrl/Cmd+Z** to undo, **Ctrl/Cmd+Shift+Z** or **Ctrl+Y** to redo. They apply to sampler
+settings, sequences, trim, WARP anchors, sample loading and unloading. A mouse drag counts
+as one edit. Other machines and global effects have separate controls and are not included
+in this sampler history. Text fields retain their own text-editing shortcuts.
+
+History belongs to the current session and resets when opening or creating a project.
+It holds up to 32 edits, with a 480 MiB budget for distinct audio retained by the current
+sampler and its history; older entries are discarded first. Undoing a sample replacement
+or unload prepares its audio in the background. Editing waits until that restoration ends;
+voices on replaced lanes stop and the restored sample plays on its next trigger or audition.
+
 ### WARP: beat matching, musical grid and local stretch markers
 
 1. Trim **IN / OUT** to the loop you want to use. Set **Beats** to its musical length:
@@ -122,6 +142,17 @@ Audition keeps the head moving even when the sequencer is stopped or the sample 
 6. Select an anchor to see its source time and edit its **Beat offset** numerically
    (zero = the beginning of the region). Use **Remove selected**, Delete while the
    waveform has focus, or **Reset markers** to return to a linear beat fit.
+
+Warp anchors use the interface's **acid green**; the selected anchor is thicker. The
+playhead stays **white**, so playback remains distinct from editing markers.
+
+For a starting point, press **DETECT TRANSIENTS**. Analysis runs in the background on the
+selected IN/OUT region and proposes up to 16 separated attacks. Dim green lines preview
+these suggestions. After fitting to Beats, **APPLY SUGGESTIONS** adds anchors at their
+current musical positions, preserving existing anchors and their timing. The lane still
+has a total limit of 16 anchors. Move the new anchors yourself to adjust timing, or use
+**UNDO** to revert the addition. **Dismiss** removes the preview. Detection never applies
+markers automatically and does not infer BPM or beat count.
 
 Both mouse and MIDI WARP/FIT use the beat fit. Beats is independent from the sequencer's
 Length in bars. This fits a declared musical length; it does **not** detect BPM or decide

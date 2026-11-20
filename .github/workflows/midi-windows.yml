@@ -138,7 +138,15 @@ jobs:
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
 
-          ## Latest changes — 19 November 2026
+          ## Latest changes — 20 November 2026
+
+          - **Sampler Undo / Redo:** undo settings, sequences, WARP anchors and sample
+            loading/unloading. Buttons and Ctrl/Cmd+Z / Shift+Z / Ctrl+Y are available.
+          - **Unload by right-click:** right-click a sample name and choose Unload sample.
+          - **WARP assistance:** acid-green anchors, a white playhead and optional
+            DETECT TRANSIENTS previews. APPLY SUGGESTIONS adds anchors only on request,
+            preserving existing anchors and their timing. Beat count remains user-defined.
+          - **Fixed Graphite interface:** the obsolete Mods menu is hidden in Studio.
 
           - **Sampler playheads:** live source heads on the rack and detailed editor,
             plus a musical-time head on the WARP grid. Includes audition, reverse and loops.

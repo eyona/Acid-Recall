@@ -226,6 +226,9 @@ pub fn defaults() -> Vec<(String, u8)> {
 
 impl App {
     pub(crate) fn studio_midi(&mut self) {
+        if self.studio.history_restoring {
+            return;
+        }
         let before = self.studio.settings.clone();
         let duck_before = self.settings.sidechain.clone();
         let mut auditions = Vec::new();

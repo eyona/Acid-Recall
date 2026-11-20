@@ -1,11 +1,13 @@
 //! Studio UI, asynchronous preparation and portable projects.
 
 mod editors;
+mod history;
 pub mod midi;
 pub mod project;
 mod rack;
 #[cfg(test)]
 mod tests;
+mod transients;
 mod warp_editor;
 
 use std::path::{Path, PathBuf};
@@ -24,6 +26,12 @@ use crate::app::App;
 use project::{Metadata, Project};
 
 enum Completed {
+    History(
+        Box<history::SamplerState>,
+        [Option<Box<Wave>>; 8],
+        [bool; 8],
+    ),
+    Transients(usize, transients::Proposal),
     Init(Box<Studio>, Arc<Wave>),
     Wave(usize, String, Arc<Wave>, Box<Wave>),
     Reverb(String, Arc<Wave>, Box<Convolver>),
@@ -65,6 +73,10 @@ impl WaveformCache {
 }
 
 pub struct StudioUi {
+    history: history::History,
+    history_backup: Option<history::History>,
+    history_restoring: bool,
+    proposals: [Option<transients::Proposal>; 8],
     wave_views: [WaveformCache; 9],
     warp_peaks: [warp_editor::WarpPeaks; 8],
     waveform_epoch: u64,
@@ -97,7 +109,11 @@ pub struct StudioUi {
 
 impl Default for StudioUi {
     fn default() -> Self {
-        Self {
+        let mut state = Self {
+            history: Default::default(),
+            history_backup: None,
+            history_restoring: false,
+            proposals: std::array::from_fn(|_| None),
             wave_views: std::array::from_fn(|_| WaveformCache::default()),
             warp_peaks: std::array::from_fn(|_| warp_editor::WarpPeaks::default()),
             waveform_epoch: ASSET_EPOCH.fetch_add(1, Ordering::Relaxed),
@@ -126,7 +142,9 @@ impl Default for StudioUi {
             revision: 0,
             worker: None,
             clipboard: None,
-        }
+        };
+        state.history.reset(history::SamplerState::capture(&state));
+        state
     }
 }
 
@@ -211,8 +229,25 @@ impl App {
             self.studio.opening = false;
             match result {
                 Err(e) => {
+                    if let Some(history) = self.studio.history_backup.take() {
+                        self.studio.history = history;
+                    }
+                    self.studio.history_restoring = false;
                     self.after_save = None;
                     self.studio.notice = Some(e);
+                }
+                Ok(Completed::History(state, runtime, changed)) => {
+                    self.studio.history_restoring = false;
+                    self.studio.history_backup = None;
+                    self.sampler_history_apply(*state, runtime, changed);
+                }
+                Ok(Completed::Transients(lane, proposal)) => {
+                    if proposal.matches(&self.studio, lane) {
+                        self.studio.proposals[lane] = Some(proposal);
+                    } else {
+                        self.studio.notice =
+                            Some("Sample region changed; detect transients again.".into());
+                    }
                 }
                 Ok(Completed::Init(studio, ir)) => {
                     self.studio.ir = Some(ir);
@@ -264,6 +299,7 @@ impl App {
                             self.settings.closed_hat_level = project.metadata.closed_hat;
                             self.studio.content = true;
                             self.studio.ready = true;
+                            self.sampler_history_reset();
                             self.studio_command(Command::Studio(runtime));
                             self.studio_mirror();
                             self.doc.modified = false;
@@ -314,6 +350,7 @@ impl App {
         if self.studio.worker.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(40));
         }
+        self.sampler_history_poll(ctx);
     }
 
     pub(crate) fn studio_open(&mut self, path: &Path, ctx: &Context) {
