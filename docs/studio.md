@@ -146,17 +146,28 @@ voices on replaced lanes stop and the restored sample plays on its next trigger 
 Warp anchors use the interface's **acid green**; the selected anchor is thicker. The
 playhead stays **white**, so playback remains distinct from editing markers.
 
-For a starting point, press **DETECT TRANSIENTS**. Analysis runs in the background on the
+For a starting point, press **ANALYZE BPM / TRANSIENTS**. Analysis runs in the background on the
 selected IN/OUT region and proposes up to 16 separated attacks. Dim green lines preview
 these suggestions. After fitting to Beats, **APPLY SUGGESTIONS** adds anchors at their
 current musical positions, preserving existing anchors and their timing. The lane still
 has a total limit of 16 anchors. Move the new anchors yourself to adjust timing, or use
-**UNDO** to revert the addition. **Dismiss** removes the preview. Detection never applies
-markers automatically and does not infer BPM or beat count.
+**UNDO** to revert the addition. **Dismiss analysis** removes the preview.
+
+The **Est. BPM** row shows an optional estimate from rhythmic attacks in IN/OUT. Use
+**÷2 / ×2** to choose half-time or double-time (20–400 BPM). The initial search covers
+50–200 BPM. Short, silent or irregular audio may yield no reliable estimate; rhythmic
+subdivisions can suggest a different octave. Always check by ear. This is a tempo estimate,
+not a downbeat or time-signature detector.
+
+**USE ~N BEATS** rounds the region's estimated duration to the nearest whole beat (1–256),
+then enables the existing beat fit. It preserves anchors and song tempo, and can be undone.
+This works best on trimmed loops containing complete beats; adjust Beats manually for
+an incomplete phrase. Analysis and the half/double buttons alone never change playback.
+Applying transient suggestions keeps the BPM estimate available.
 
 Both mouse and MIDI WARP/FIT use the beat fit. Beats is independent from the sequencer's
-Length in bars. This fits a declared musical length; it does **not** detect BPM or decide
-how many beats the recording contains. Use the correct beat count for your sample.
+Length in bars. This fits the musical length you confirm. Use the correct beat count for
+your sample, entered manually or chosen after checking the optional estimate.
 
 Older projects retain their saved source-BPM behavior. In that mode, **Src BPM** remains
 20–400 BPM. For a known 120-BPM recording, enable WARP, choose **BPM mode**, then enter
@@ -176,8 +187,7 @@ grain alignment. Warp settings and anchors save in portable `.orb338` projects. 
 a replacement sample resets Warp, beat fitting and anchors instead of reusing another
 recording's map.
 
-Automatic tempo detection and Ableton's proprietary Complex/Complex Pro processing are
-not included. Dense polyphonic
+Ableton's proprietary Complex/Complex Pro processing is not included. Dense polyphonic
 material and extreme tempo changes can color transients and timbre; use moderate ratios
 for more natural results. Tempo changes remain live and do not require rebuilding a sample.
 

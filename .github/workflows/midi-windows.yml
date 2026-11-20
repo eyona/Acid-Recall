@@ -144,8 +144,9 @@ jobs:
             loading/unloading. Buttons and Ctrl/Cmd+Z / Shift+Z / Ctrl+Y are available.
           - **Unload by right-click:** right-click a sample name and choose Unload sample.
           - **WARP assistance:** acid-green anchors, a white playhead and optional
-            DETECT TRANSIENTS previews. APPLY SUGGESTIONS adds anchors only on request,
-            preserving existing anchors and their timing. Beat count remains user-defined.
+            ANALYZE BPM / TRANSIENTS previews. Review Est. BPM with ÷2 / ×2, then use
+            USE ~N BEATS to confirm a beat fit. APPLY SUGGESTIONS adds anchors only on
+            request, preserving existing anchors and their timing.
           - **Fixed Graphite interface:** the obsolete Mods menu is hidden in Studio.
 
           - **Sampler playheads:** live source heads on the rack and detailed editor,
@@ -157,7 +158,7 @@ jobs:
           - **Sampler WARP:** fit IN/OUT to the chosen Beats. MARKERS / GRID provides
             numbered bars, beats and sixteenths, 16 local stretch anchors, snap/free
             placement and 16× waveform zoom. Anchors save in portable projects.
-            Beat count is user-defined; automatic BPM detection is not included.
+            Beat count can be entered manually or confirmed from the optional BPM estimate.
           - **Easier MIDI Learn:** right-click a rack control, choose **MIDI LEARN...** and
             move your controller. Right-click again to remove its assignment or choose a
             personal **MAX (0–127)** for each continuous control. The full physical fader

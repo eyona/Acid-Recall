@@ -250,6 +250,10 @@ impl App {
             .as_ref()
             .filter(|p| p.matches(&self.studio, index))
             .map(|p| p.sources.clone());
+        let mut estimated_bpm = self.studio.proposals[index]
+            .as_ref()
+            .filter(|p| p.matches(&self.studio, index))
+            .and_then(|p| p.bpm);
         let mut detect = false;
         let mut open = true;
         let mut audition = false;
@@ -266,7 +270,10 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     self.sampler_history_buttons(ui);
                     detect = ui
-                        .add_enabled(!self.studio.busy(), egui::Button::new("DETECT TRANSIENTS"))
+                        .add_enabled(
+                            !self.studio.busy(),
+                            egui::Button::new("ANALYZE BPM / TRANSIENTS"),
+                        )
                         .clicked();
                     if self.studio.busy() {
                         ui.spinner();
@@ -276,6 +283,46 @@ impl App {
                 if selected.is_some_and(|i| i >= lane.warp_markers.points().len()) {
                     selected = None;
                 }
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(estimated_bpm.map_or_else(
+                        || {
+                            if suggestions.is_some() {
+                                "Est. BPM: unavailable (too short or no regular pulse)".into()
+                            } else {
+                                "Est. BPM: — (analyze a rhythmic sample)".into()
+                            }
+                        },
+                        |bpm| format!("Est. BPM: {bpm:.1}"),
+                    ));
+                    for (label, factor) in [("÷2", 0.5), ("×2", 2.0)] {
+                        let valid = estimated_bpm
+                            .is_some_and(|bpm| (20.0..=400.0).contains(&(bpm * factor)));
+                        if ui.add_enabled(valid, egui::Button::new(label)).clicked() {
+                            estimated_bpm = estimated_bpm.map(|bpm| bpm * factor);
+                            if let Some(proposal) = &mut self.studio.proposals[index] {
+                                proposal.bpm = estimated_bpm;
+                            }
+                        }
+                    }
+                    let beats = estimated_bpm.and_then(|bpm| {
+                        super::transients::estimated_beats(bpm, wave.frames.len(), lane)
+                    });
+                    let label = beats.map_or_else(
+                        || "USE ESTIMATE".into(),
+                        |beats| format!("USE ~{beats} BEATS"),
+                    );
+                    if ui
+                        .add_enabled(beats.is_some(), egui::Button::new(label))
+                        .on_hover_text(
+                            "Fit IN/OUT to the nearest whole beat count from the estimate. \
+                            Existing anchors are kept; the song tempo stays unchanged.",
+                        )
+                        .clicked()
+                    {
+                        lane.warp_beats = beats.unwrap();
+                        lane.fit_warp(Some(wave.frames.len()));
+                    }
+                });
                 let peaks = &mut self.studio.warp_peaks[index];
                 peaks.prepare(self.studio.waveform_epoch, &wave.frames);
                 ui.label(
@@ -334,9 +381,11 @@ impl App {
                             .clicked()
                         {
                             super::transients::apply(lane, sources);
-                            self.studio.proposals[index] = None;
+                            if let Some(proposal) = &mut self.studio.proposals[index] {
+                                proposal.sources.clear();
+                            }
                         }
-                        if ui.button("Dismiss").clicked() {
+                        if ui.button("Dismiss analysis").clicked() {
                             self.studio.proposals[index] = None;
                         }
                     });
