@@ -27,8 +27,9 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
 
 - **Safer sampler editing:** UNDO / REDO for sampler and WARP edits, including sample
   loading and unloading. Right-click a sample name to **Unload sample**.
-- **WARP assistance:** acid-green anchors, a white playhead, and optional **DETECT
-  TRANSIENTS** suggestions. Review them before **APPLY SUGGESTIONS**; existing anchors stay.
+- **WARP assistance:** acid-green anchors, a white playhead, and **ANALYZE BPM / TRANSIENTS**.
+  Review the estimated BPM, adjust **÷2 / ×2**, then choose **USE ~N BEATS** to fit the loop.
+  **APPLY SUGGESTIONS** adds optional transient anchors; existing anchors stay.
 - **One Graphite interface:** the obsolete Mods menu is hidden in Studio.
 
 - **Sampler playheads and knobs:** live source-position heads on the rack and sampler
@@ -38,8 +39,8 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   MIDI-assignable and shared with the corrected detailed editor.
 - **Sampler WARP grid:** fit the trimmed sample to Beats, then use MARKERS / GRID to place
   up to 16 local stretch anchors on a numbered bar/beat/sixteenth grid. Includes snap,
-  free placement, 16× zoom and portable project saving. Beats must be specified; this is
-  not automatic BPM detection.
+  free placement, 16× zoom and portable project saving. Enter Beats yourself or review
+  the optional BPM estimate and proposed beat count before applying them.
 - **MIDI Learn directly on the rack:** right-click an assignable control, choose
   **MIDI LEARN...**, then move your controller. Right-click again to remove the assignment
   or choose a personal **MAX from 0 to 127** for each continuous control. Your full fader
