@@ -21,7 +21,14 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
-## Latest preview — 20 November 2026
+## Latest preview — 21 November 2026
+
+- **MIDI Clock IN:** stable nominal-tempo display, independent from phase correction;
+  adaptive pulse averaging follows tempo changes while rejecting timestamp jitter.
+- **Stop returns to measure 1:** Stop and Space rewind immediately. The next MASTER / OUT
+  playback sends Start from the beginning.
+- **Reliable peak meters:** every-sample measurement, orange from −6 dBFS, red at 0 dBFS,
+  one-second peak hold and a three-second CLIP latch. The stereo master shows dBFS values.
 
 - **Safer sampler editing:** UNDO / REDO for sampler and WARP edits, including sample
   loading and unloading. Right-click a sample name to **Unload sample**.

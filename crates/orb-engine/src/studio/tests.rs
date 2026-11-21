@@ -5,6 +5,53 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[test]
+fn studio_meters_capture_all_channel_and_master_samples_without_touching_audio() {
+    let mut studio = Studio::new(Box::new(Convolver::new(&[[0.0; 2]; 64]).unwrap()));
+    let mut left = [0.0; 64];
+    let mut right = [0.0; 64];
+    left[37] = -1.25;
+    right[11] = 0.8;
+    studio.channel(0, 37, -1.5, 0.0);
+    studio.sampler_bus.dry[1][19] = 1.1;
+    let before = [left, right];
+    studio.meter_output(&left, &right);
+    assert_eq!([left, right], before);
+    let meters = studio.meter_readings();
+    assert_eq!(meters[0].peak, 1.5);
+    assert!(meters[0].clip);
+    assert!(meters[5].clip);
+    assert_eq!(meters[6].peak, 1.25);
+    assert!(meters[6].clip);
+    assert!(!meters[7].clip);
+    assert_eq!(crate::frame::to_i16(left[37]), i16::MIN);
+}
+
+#[test]
+fn actual_sampler_overload_reaches_the_preconversion_master_meter() {
+    let mut engine = sampler_engine(
+        SamplerBusSettings {
+            gain: 2.0,
+            ..SamplerBusSettings::default()
+        },
+        0.0,
+    );
+    let studio = engine.frame.studio.as_mut().unwrap();
+    studio.sampler.replace(
+        0,
+        Some(Box::new(audio_file::Wave {
+            frames: vec![[1.5; 2]; 44100],
+        })),
+    );
+    studio.sampler.audition(0);
+    let output = render_sampler(&mut engine, 12);
+    assert!(output.contains(&i16::MAX));
+    let meters = engine.frame.studio.as_ref().unwrap().meter_readings();
+    assert!(meters[4].clip && meters[5].clip);
+    assert!(meters[6].clip && meters[7].clip);
+    assert!(meters[6].hold > 1.0);
+}
+
 fn sampler_engine(bus: SamplerBusSettings, lane_send: f64) -> Engine {
     let mut engine = Engine::new(Arc::new(Tables::new()), Devices::implemented(None));
     for channel in &mut engine.frame.devices.mixer.live.channels {

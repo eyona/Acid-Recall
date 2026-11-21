@@ -8,6 +8,11 @@ pub const OFF: u8 = 0;
 pub const MASTER: u8 = 1;
 pub const SLAVE: u8 = 2;
 
+/// Nominal received tempo, independent of the audio follower's phase correction.
+pub fn tempo_for_period(period: u64) -> u32 {
+    ((2_500_000_000_000 + period.max(1) / 2) / period.max(1)).clamp(20_000, 400_000) as u32
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InputFrame {
     pub at: u64,
@@ -210,7 +215,7 @@ pub struct Follower {
     armed: bool,
     armed_at: u64,
     previous: Option<u64>,
-    intervals: [u64; 6],
+    intervals: [u64; 96],
     count: usize,
     cursor: usize,
 }
@@ -226,7 +231,7 @@ impl Default for Follower {
             armed: false,
             armed_at: 0,
             previous: None,
-            intervals: [0; 6],
+            intervals: [0; 96],
             count: 0,
             cursor: 0,
         }
@@ -262,16 +267,30 @@ impl Follower {
                     let interval = at.saturating_sub(previous);
                     // Supported 20..400 BPM; reject duplicate and wildly late packets.
                     if (6_000_000..=130_000_000).contains(&interval) {
+                        // A sustained tempo change must not spend four beats in the old window.
+                        // Confirm three similar new intervals before discarding the old tempo;
+                        // isolated jitter keeps the long, timestamp-cancelling average.
+                        if self.count >= 12
+                            && interval.abs_diff(self.state.period) * 100 > self.state.period * 8
+                            && (1..=2).all(|back| {
+                                let i = (self.cursor + self.intervals.len() - back)
+                                    % self.intervals.len();
+                                self.intervals[i].abs_diff(interval) * 100 <= interval * 3
+                            })
+                        {
+                            self.intervals.fill(0);
+                            self.count = 0;
+                            self.cursor = 0;
+                        }
                         self.intervals[self.cursor] = interval;
                         self.cursor = (self.cursor + 1) % self.intervals.len();
                         self.count = (self.count + 1).min(self.intervals.len());
                         self.state.period = self.intervals.iter().sum::<u64>() / self.count as u64;
-                        shared.bpm.store(
-                            (2_500_000_000_000u64 / self.state.period) as u32,
-                            Ordering::Relaxed,
-                        );
+                        shared
+                            .bpm
+                            .store(tempo_for_period(self.state.period), Ordering::Relaxed);
                     } else {
-                        self.intervals = [0; 6];
+                        self.intervals = [0; 96];
                         self.count = 0;
                         self.cursor = 0;
                     }

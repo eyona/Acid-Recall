@@ -136,7 +136,7 @@ impl Transport {
     }
 
     pub fn tempo_display(&self) -> i32 {
-        self.tempo / 1000
+        (self.tempo + 500) / 1000
     }
 
     pub fn bar_display(&self) -> i32 {
@@ -264,6 +264,8 @@ impl Synth303 {
 /// The whole panel's state.
 #[derive(Clone, Debug)]
 pub struct Panel {
+    pub restart_on_stop: bool,
+    pub studio_meters: [orb_engine::studio::meter::Reading; 8],
     pub sampler_playheads: [Option<orb_engine::studio::sampler::Playhead>; 8],
     pub transport: Transport,
     pub rows: [Row; 4],
@@ -321,6 +323,8 @@ fn index_of(section: &str, prefix: &str) -> Option<usize> {
 impl Panel {
     pub fn new() -> Self {
         let mut p = Self {
+            restart_on_stop: false,
+            studio_meters: Default::default(),
             sampler_playheads: [None; 8],
             transport: Transport::default(),
             rows: Default::default(),
@@ -818,6 +822,19 @@ impl Panel {
                 });
             }
             "stop" => {
+                if self.restart_on_stop {
+                    let recording = t.recording;
+                    t.recording = false;
+                    t.playing = false;
+                    t.position = 0;
+                    if recording {
+                        self.set_event("transport.record", 0);
+                    }
+                    self.emit(Event::Press {
+                        id: "transport.stop".into(),
+                    });
+                    return;
+                }
                 // Playing: stop `{1, 0}`; stopped: locate `{8, t}` (`sub_429FE6`).
                 let was_playing = t.playing;
                 let was_recording = t.recording;
@@ -1253,6 +1270,30 @@ impl Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn studio_stop_always_rewinds_and_fractional_tempo_rounds_to_nearest_bpm() {
+        let mut panel = Panel::new();
+        panel.restart_on_stop = true;
+        for playing in [true, false] {
+            panel.transport.playing = playing;
+            panel.transport.position = 5000;
+            panel.transport.recording = true;
+            panel.press("transport.stop", 0.0);
+            assert_eq!(panel.transport.position, 0);
+            assert!(!panel.transport.playing && !panel.transport.recording);
+            assert!(
+                panel
+                    .events
+                    .iter()
+                    .any(|e| matches!(e, Event::Press { id } if id == "transport.stop"))
+            );
+        }
+        for tempo in [139_999, 140_000, 140_180] {
+            panel.transport.tempo = tempo;
+            assert_eq!(panel.transport.tempo_display(), 140);
+        }
+    }
     use crate::behavior::Mods;
 
     #[test]

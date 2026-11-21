@@ -50,6 +50,25 @@ parameters are left blank rather than represented by inactive or nonfunctional k
 Smaller TR knobs leave more space between the control and its label. TB **ARP** applies
 the current arpeggiator settings immediately; **Options > Arpeggiator** opens configuration.
 
+## Transport and output peak meters
+
+**Stop**, including the Space shortcut during playback, always stops recording and rewinds
+Studio to measure 1, including when another song is waiting to be played. The next Play in
+MASTER / OUT sends MIDI Start. In SLAVE / IN, the external master controls Start/Continue;
+local Stop is an emergency stop until the next external transport command.
+
+Machine and sampler meters measure **sample peaks on every sample**, after their inserts
+and faders. The stereo master measures the final mix after master compression/fader and
+before conversion to the clipped 16-bit output. Green indicates ordinary levels, orange
+begins at **−6 dBFS**, and red/CLIP indicates **0 dBFS or above**. Peaks hold for one second;
+the overload indicator stays visible for three seconds. The master shows separate L/R
+peak values in dBFS, and machine meters show them on hover. Meter release is 24 dB/second,
+timed by audio samples rather than screen refreshes. Short overloads remain visible.
+
+These are sample-peak meters, not oversampled inter-sample true-peak meters. Distortion
+effects can intentionally color the sound below 0 dBFS; CLIP reports full-scale overload
+at the measured point. Metering does not alter the audio or add a limiter.
+
 ## Pattern styles
 
 The generator offers **Techno | IDM | Break**, shared by both TBs and both TRs.

@@ -409,6 +409,7 @@ impl Link {
         // changes
         let gr_moved = self.shown_gr.replace(panel.gr_leds) != Some(panel.gr_leds);
         playing
+            || s.studio_meters.iter().any(|m| m.hold > 0.0001 || m.clip)
             || sampler_lit
             || sampler_moving
             || frames <= mark
@@ -887,7 +888,13 @@ impl Link {
         for e in &events {
             for m in self.messages(e) {
                 if let Some(c) = Self::command(&m) {
-                    self.backlog.push_back(c);
+                    self.backlog.push_back(
+                        if panel.restart_on_stop && matches!(c, Command::Stop) {
+                            Command::StopReset
+                        } else {
+                            c
+                        },
+                    );
                 }
                 if let Some(log) = &mut self.log {
                     log.push(m);
@@ -927,6 +934,7 @@ impl Link {
     /// Takes the engine's state into the panel.
     pub fn follow(&mut self, panel: &mut Panel) {
         let s = *self.player.snapshot();
+        panel.studio_meters = s.studio_meters;
         panel.sampler_playheads = s.sampler_playheads;
         self.refresh_tracks();
         // the meters and the running lights follow every call

@@ -369,7 +369,7 @@ fn the_callback_does_not_allocate() {
     send(&mut p, Command::SongMode(false));
     events += render(&mut a, &mut buf, 20);
     send(&mut p, Command::SongMode(true));
-    send(&mut p, Command::Stop);
+    send(&mut p, Command::StopReset);
     events += render(&mut a, &mut buf, 3);
     assert!(p.load(&mix, Some(samples())).is_ok());
     send(&mut p, Command::Play);

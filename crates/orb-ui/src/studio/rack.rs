@@ -469,9 +469,12 @@ impl App {
         let meter = self
             .link
             .as_mut()
-            .map(|link| link.player().snapshot().sampler_meter)
-            .unwrap_or([0; 2]);
-        if meter.iter().any(|&v| v > 0) {
+            .map(|link| {
+                let s = link.player().snapshot();
+                [s.studio_meters[4], s.studio_meters[5]]
+            })
+            .unwrap_or_default();
+        if meter.iter().any(|v| v.peak > 0.0001 || v.clip) {
             ui.ctx().request_repaint_after(crate::app::METER_FRAME);
         }
         // Reuse the four native mixer controls and their exact relative geometry.
@@ -520,7 +523,11 @@ impl App {
             crate::graphite_rack::mix_meter(
                 ui,
                 at(42.0, 38.0, 5.0, 40.0),
-                crate::link::meter_state(meter[0].max(meter[1])),
+                orb_engine::studio::meter::Reading {
+                    peak: meter[0].peak.max(meter[1].peak),
+                    hold: meter[0].hold.max(meter[1].hold),
+                    clip: meter.iter().any(|v| v.clip),
+                },
             );
             let mut pan = ((bus.pan + 1.0) * 500.0).round() as i32;
             if crate::graphite_rack::mix_knob(
@@ -977,11 +984,78 @@ impl App {
                     {
                         self.panel.set_fader("master.fader", level);
                     }
-                    for key in ["master.meter_l", "master.meter_r"] {
-                        let level = f32::from(*self.panel.meters.get(key).unwrap_or(&0)) / 31.0;
-                        ui.add(egui::ProgressBar::new(level.clamp(0.0, 1.0)).desired_height(8.0));
+                    for (c, name) in ["L", "R"].into_iter().enumerate() {
+                        let reading = self.panel.studio_meters[6 + c];
+                        if reading.hold > 0.0001 || reading.clip {
+                            ui.ctx().request_repaint_after(crate::app::METER_FRAME);
+                        }
+                        let db = crate::graphite_rack::meter_db(reading.peak);
+                        let held = crate::graphite_rack::meter_db(reading.hold);
+                        ui.horizontal(|ui| {
+                            ui.small(name);
+                            ui.colored_label(
+                                crate::graphite_rack::meter_color(held),
+                                if reading.clip {
+                                    format!("CLIP {held:+.1} dBFS")
+                                } else if held <= -90.0 {
+                                    "−∞ dBFS".into()
+                                } else {
+                                    format!("{held:+.1} dBFS")
+                                },
+                            );
+                        });
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), 10.0),
+                            egui::Sense::hover(),
+                        );
+                        for segment in 0..30 {
+                            let threshold = -58.0 + segment as f32 * 2.0;
+                            let x = rect.left() + segment as f32 * rect.width() / 30.0;
+                            let led = Rect::from_min_size(
+                                egui::pos2(x, rect.top()),
+                                egui::vec2((rect.width() / 30.0 - 1.0).max(1.0), rect.height()),
+                            );
+                            let lit = db >= threshold || (segment == 29 && reading.clip);
+                            ui.painter().rect_filled(
+                                led,
+                                0.0,
+                                if lit {
+                                    crate::graphite_rack::meter_color(threshold)
+                                } else {
+                                    Color32::from_gray(45)
+                                },
+                            );
+                        }
+                        let x = rect.left() + ((held + 60.0) / 60.0).clamp(0.0, 1.0) * rect.width();
+                        if held > -60.0 {
+                            ui.painter().line_segment(
+                                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                                egui::Stroke::new(1.0, Color32::WHITE),
+                            );
+                        }
                     }
-                    ui.small("Stereo master / compressor before output");
+                    let (scale, _) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 12.0),
+                        egui::Sense::hover(),
+                    );
+                    for db in [-60, -36, -24, -12, -6, 0] {
+                        let x = scale.left() + (db + 60) as f32 / 60.0 * scale.width();
+                        let align = if db == -60 {
+                            Align2::LEFT_TOP
+                        } else if db == 0 {
+                            Align2::RIGHT_TOP
+                        } else {
+                            Align2::CENTER_TOP
+                        };
+                        ui.painter().text(
+                            egui::pos2(x, scale.top()),
+                            align,
+                            db.to_string(),
+                            FontId::monospace(9.0),
+                            Color32::from_gray(150),
+                        );
+                    }
+                    ui.small("Output peaks / hold 1 s / CLIP 3 s");
                 }
             });
         }

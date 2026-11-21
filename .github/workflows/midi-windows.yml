@@ -138,7 +138,16 @@ jobs:
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
 
-          ## Latest changes — 20 November 2026
+          ## Latest changes — 21 November 2026
+
+          - **MIDI Clock IN:** the global tempo shows nominal received BPM with proper
+            rounding, independently from phase corrections. Adaptive timestamp averaging
+            reduces jitter and follows deliberate tempo changes promptly.
+          - **Stop / Space:** Studio rewinds to measure 1, including with a pending song.
+            The next MASTER / OUT playback sends Start from the beginning.
+          - **Peak meters:** all samples measured after faders, with orange from −6 dBFS,
+            red at 0 dBFS, a one-second peak hold and three-second CLIP latch. Stereo master
+            L/R values are measured before output clipping and displayed in dBFS.
 
           - **Sampler Undo / Redo:** undo settings, sequences, WARP anchors and sample
             loading/unloading. Buttons and Ctrl/Cmd+Z / Shift+Z / Ctrl+Y are available.

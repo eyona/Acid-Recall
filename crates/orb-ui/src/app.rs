@@ -601,6 +601,7 @@ impl App {
 
     /// Draws the whole panel in the free area of `ui` and handles the input.
     pub fn show(&mut self, ui: &mut Ui) {
+        self.panel.restart_on_stop = self.studio.modern;
         self.studio.context = ui.ctx().clone();
         self.studio_poll(ui.ctx());
         if self.studio.opening {

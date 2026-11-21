@@ -136,6 +136,8 @@ impl std::fmt::Display for LoadError {
 /// What the UI sends to the newest song (current, or pending: see the crate doc). Each variant
 /// names the engine message it stands for.
 pub enum Command {
+    /// Studio transport: stop recording/playback and rewind to measure one atomically.
+    StopReset,
     /// Prepared Studio runtime, settings and assets. All large drops return through Garbage.
     Studio(Box<orb_engine::studio::Studio>),
     StudioClear,
@@ -365,6 +367,8 @@ impl LiveBlock {
 /// What the UI reads back: the current song's state after the last engine call.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Snapshot {
+    /// Studio sample peaks: four machines, sampler L/R, final master L/R, before clipping.
+    pub studio_meters: [orb_engine::studio::meter::Reading; 8],
     /// Sampler stereo bus peaks after its global fader/insert, before the master fader.
     pub sampler_meter: [u8; 2],
     pub sampler_playheads: [Option<orb_engine::studio::sampler::Playhead>; 8],
@@ -712,6 +716,24 @@ impl Audio {
             .load(std::sync::atomic::Ordering::Acquire);
         let count = if mode == clock::OFF { CALL_FRAMES } else { 64 };
         let leaving_slave = self.midi_clock.was_slave() && mode != clock::SLAVE;
+        if leaving_slave {
+            if self.midi_clock.input.period > 0
+                && (self.midi_clock.input.playing
+                    || self
+                        .midi_clock
+                        .shared
+                        .bpm
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        > 0)
+            {
+                self.current
+                    .set_tempo(clock::tempo_for_period(self.midi_clock.input.period));
+            }
+            self.current.halt();
+            if let Some(studio) = &mut self.current.frame.studio {
+                studio.sampler.stop();
+            }
+        }
         self.midi_clock.master(
             self.frames,
             count,
@@ -719,12 +741,6 @@ impl Audio {
             self.current.frame.seq.globals.tempo,
             self.current.frame.seq.tick_pos(),
         );
-        if leaving_slave {
-            self.current.halt();
-            if let Some(studio) = &mut self.current.frame.studio {
-                studio.sampler.stop();
-            }
-        }
         if mode == clock::SLAVE {
             self.follow_clock();
         }
@@ -756,6 +772,10 @@ impl Audio {
     }
 
     fn follow_clock(&mut self) {
+        self.follow_clock_at(self.midi_clock.shared.now());
+    }
+
+    fn follow_clock_at(&mut self, now: u64) {
         use std::sync::atomic::Ordering;
         if let Some(input) = self.midi_clock.shared.read() {
             self.midi_clock.input = input;
@@ -765,18 +785,16 @@ impl Audio {
         if !input.playing || inhibited {
             if self.current.playing() {
                 self.current.halt();
+                if self.current.frame.studio.is_some() {
+                    self.current.locate(0);
+                }
                 if let Some(studio) = &mut self.current.frame.studio {
                     studio.sampler.stop();
                 }
             }
             return;
         }
-        let elapsed = self
-            .midi_clock
-            .shared
-            .now()
-            .saturating_sub(input.at)
-            .min(500_000_000);
+        let elapsed = now.saturating_sub(input.at).min(500_000_000);
         let period = input.period.max(1);
         let mut target = input.tick as f64 + elapsed as f64 * 8.0 / period as f64;
         let g = &self.current.frame.seq.globals;
@@ -921,6 +939,28 @@ impl Audio {
                     self.switch(new);
                 } else {
                     self.current.play();
+                }
+            }
+            Command::StopReset => {
+                if self
+                    .midi_clock
+                    .shared
+                    .mode
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    == clock::SLAVE
+                {
+                    self.midi_clock
+                        .shared
+                        .inhibit
+                        .store(true, std::sync::atomic::Ordering::Release);
+                }
+                for target in std::iter::once(&mut self.current).chain(self.pending.iter_mut()) {
+                    target.set_record(0);
+                    target.halt();
+                    target.locate(0);
+                    if let Some(studio) = &mut target.frame.studio {
+                        studio.sampler.stop();
+                    }
                 }
             }
             Command::Stop => {
@@ -1116,6 +1156,10 @@ impl Audio {
         let g = &f.seq.globals;
         let s = self.snapshot.input_buffer_mut();
         s.closed_hat_level = f.devices.channels[3].closed_hat_level();
+        s.studio_meters = f
+            .studio
+            .as_ref()
+            .map_or(Default::default(), |s| s.meter_readings());
         s.sidechain_reduction = f.sidechain.reduction();
         s.sampler_meter = f
             .studio
@@ -1134,7 +1178,25 @@ impl Audio {
         s.loop_on = g.loop_on != 0;
         s.loop_start = g.loop_start;
         s.loop_end = g.loop_end;
-        s.tempo = g.tempo;
+        s.tempo = if self
+            .midi_clock
+            .shared
+            .mode
+            .load(std::sync::atomic::Ordering::Acquire)
+            == clock::SLAVE
+            && self.midi_clock.input.period > 0
+            && (self.midi_clock.input.playing
+                || self
+                    .midi_clock
+                    .shared
+                    .bpm
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    > 0)
+        {
+            clock::tempo_for_period(self.midi_clock.input.period)
+        } else {
+            g.tempo
+        };
         s.shuffle = g.shuffle;
         s.vintage = f.vintage;
         s.mixer = f.devices.mixer.live;

@@ -1,6 +1,107 @@
 use super::*;
 
 #[test]
+fn slave_tempo_changes_adapt_without_seeks_or_retriggering() {
+    let (mut player, mut audio) =
+        crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);
+    let connection = player.take_midi_clock().unwrap();
+    let shared = &connection.shared;
+    let mut follower = Follower::default();
+    follower.receive(0xfa, 0, shared);
+    let mut next = 0.0;
+    let mut period = 2_500_000_000.0 / 140.0;
+    for frame in (0..44100_u64 * 60).step_by(64) {
+        let now = frame * 1_000_000_000 / 44100;
+        while next as u64 <= now {
+            let bpm = if next < 20e9 {
+                140.0
+            } else if next < 40e9 {
+                100.0
+            } else {
+                180.0
+            };
+            period = 2_500_000_000.0 / bpm;
+            follower.receive(0xf8, next as u64, shared);
+            next += period;
+        }
+        let before = audio.current.frame.seq.pos;
+        audio.follow_clock_at(now);
+        if frame > 0 {
+            assert!(
+                (audio.current.frame.seq.pos - before).abs() < 0.001,
+                "tempo adaptation must not seek at frame {frame}"
+            );
+        }
+        let expected = follower.state.tick as f64
+            + now.saturating_sub(follower.state.at) as f64 * 8.0 / period;
+        assert!(
+            (audio.current.frame.seq.pos - expected).abs() < 12.0,
+            "tempo transition phase error at frame {frame}"
+        );
+        audio.current.render(&mut [0; 128], 64);
+    }
+}
+
+#[test]
+fn stop_reset_stops_current_and_pending_songs_before_restarting_at_zero() {
+    for mode in [OFF, MASTER, SLAVE] {
+        let tables = Arc::new(orb_engine::tables::Tables::new());
+        let (mut player, mut audio) = crate::Player::new(tables.clone(), None);
+        let connection = player.take_midi_clock().unwrap();
+        connection.shared.mode.store(mode, Ordering::Release);
+        audio.current.locate(3100);
+        audio.current.play();
+        audio.pending = Some(Box::new(orb_engine::frame::Engine::new(
+            tables,
+            orb_engine::frame::Devices::implemented(None),
+        )));
+        audio.pending.as_mut().unwrap().locate(5000);
+        audio.apply(crate::Command::StopReset);
+        assert!(!audio.current.playing());
+        assert_eq!(audio.current.frame.seq.tick_pos(), 0);
+        assert_eq!(audio.pending.as_ref().unwrap().frame.seq.tick_pos(), 0);
+    }
+}
+
+#[test]
+fn slave_nominal_tempo_and_phase_track_a_jittery_140_bpm_clock_for_a_minute() {
+    let (mut player, mut audio) =
+        crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);
+    let connection = player.take_midi_clock().unwrap();
+    let shared = &connection.shared;
+    shared.mode.store(SLAVE, Ordering::Release);
+    let mut follower = Follower::default();
+    follower.receive(0xfa, 0, shared);
+    let period = 2_500_000_000.0 / 140.0;
+    let mut pulse = 0_u64;
+    for frame in (0..44100_u64 * 60).step_by(64) {
+        let now = frame * 1_000_000_000 / 44100;
+        loop {
+            let timestamp = (pulse as f64 * period) as u64 + (pulse % 3) * 150_000;
+            if timestamp > now {
+                break;
+            }
+            follower.receive(0xf8, timestamp, shared);
+            pulse += 1;
+        }
+        audio.follow_clock_at(now);
+        audio.current.render(&mut [0; 128], 64);
+        if frame > 44100 * 5 {
+            let expected = frame as f64 * 140.0 * 192.0 / (60.0 * 44100.0);
+            assert!(
+                (audio.current.frame.seq.pos - expected).abs() < 4.0,
+                "clock follower must not drift: frame {frame}"
+            );
+            assert!((i64::from(tempo_for_period(follower.state.period)) - 140_000).abs() < 50);
+        }
+    }
+    audio.publish();
+    let displayed = player.snapshot().tempo;
+    assert!((i64::from(displayed) - 140_000).abs() < 50);
+    assert_eq!((displayed + 500) / 1000, 140);
+}
+
+#[test]
 fn output_clock_is_24_ppqn_without_drift_across_audio_blocks() {
     for tempo in [20_000u32, 97_300, 120_000, 140_000, 400_000] {
         let (mut connection, mut clock) = bridge();

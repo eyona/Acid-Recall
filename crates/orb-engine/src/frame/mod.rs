@@ -1101,6 +1101,9 @@ impl Frame {
             *x = st(*x as f64 * m);
         }
         // 0x10013960: the master peak meters
+        if let Some(studio) = &mut self.studio {
+            studio.meter_output(l, r);
+        }
         for (k, buf) in [&*l, &*r].into_iter().enumerate() {
             let v = abs_bits(buf[mi]);
             if v > self.state.master_peak[k] {

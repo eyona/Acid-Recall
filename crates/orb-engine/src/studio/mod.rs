@@ -5,6 +5,7 @@ mod bus;
 pub use bus::SamplerBusSettings;
 pub mod convolution;
 mod fft;
+pub mod meter;
 mod mp3;
 pub mod sampler;
 #[cfg(test)]
@@ -98,6 +99,7 @@ impl Settings {
 }
 
 pub struct Studio {
+    meters: [meter::Meter; 8],
     drum_gain: [f64; 2],
     pub settings: Box<Settings>,
     pub sampler: Sampler,
@@ -123,6 +125,7 @@ impl Studio {
     pub fn new(convolver: Box<Convolver>) -> Self {
         Self {
             drum_gain: [1.0; 2],
+            meters: Default::default(),
             settings: Box::default(),
             sampler: Sampler::default(),
             sampler_bus: bus::Bus::default(),
@@ -205,6 +208,8 @@ impl Studio {
     }
 
     pub fn channel(&mut self, channel: usize, sample: usize, left: f64, right: f64) {
+        self.meters[channel].sample(left);
+        self.meters[channel].sample(right);
         let target = if self.settings.enabled {
             self.settings.sends[channel]
         } else {
@@ -255,6 +260,25 @@ impl Studio {
 
     pub fn sampler_meter(&self) -> [u8; 2] {
         self.sampler_bus.meter()
+    }
+
+    pub fn meter_readings(&self) -> [meter::Reading; 8] {
+        self.meters.map(|m| m.reading())
+    }
+
+    /// Every sample after native master compression/fader, immediately before int16 conversion.
+    pub fn meter_output(&mut self, left: &[f32; 64], right: &[f32; 64]) {
+        for (c, bus) in [left, right].into_iter().enumerate() {
+            for &sample in bus {
+                self.meters[6 + c].sample(f64::from(sample));
+            }
+            for &sample in &self.sampler_bus.dry[c] {
+                self.meters[4 + c].sample(sample);
+            }
+        }
+        for meter in &mut self.meters {
+            meter.finish();
+        }
     }
 
     /// Add the prepared sampler and convolution return after the shared native delay.

@@ -309,8 +309,46 @@ pub(crate) fn mix_fader(
     response.on_hover_text(format!("{id}: {:.0}%", fraction * 100.0))
 }
 
-pub(crate) fn mix_meter(ui: &Ui, rect: Rect, value: u8) {
-    for level in 0..10 {
+pub(crate) fn meter_db(value: f32) -> f32 {
+    if value > 0.0 {
+        20.0 * value.log10()
+    } else {
+        -90.0
+    }
+}
+
+pub(crate) fn meter_color(db: f32) -> Color32 {
+    if db >= 0.0 {
+        Color32::from_rgb(248, 67, 60)
+    } else if db >= -6.0 {
+        Color32::from_rgb(255, 174, 52)
+    } else {
+        ACID
+    }
+}
+
+const METER_DB: [f32; 10] = [
+    -60.0, -48.0, -36.0, -24.0, -18.0, -12.0, -9.0, -6.0, -3.0, 0.0,
+];
+
+fn meter_position(db: f32) -> f32 {
+    if db < METER_DB[0] {
+        return 0.0;
+    }
+    for (i, pair) in METER_DB.windows(2).enumerate() {
+        if db < pair[1] {
+            return (i as f32 + 1.0 + (db - pair[0]) / (pair[1] - pair[0])) / 10.0;
+        }
+    }
+    1.0
+}
+
+pub(crate) fn mix_meter(ui: &Ui, rect: Rect, reading: orb_engine::studio::meter::Reading) {
+    if reading.hold > 0.0001 || reading.clip {
+        ui.ctx().request_repaint_after(crate::app::METER_FRAME);
+    }
+    let db = meter_db(reading.peak);
+    for (level, &threshold) in METER_DB.iter().enumerate() {
         let led = Rect::from_min_size(
             egui::pos2(
                 rect.left(),
@@ -318,9 +356,29 @@ pub(crate) fn mix_meter(ui: &Ui, rect: Rect, value: u8) {
             ),
             egui::vec2(rect.width(), rect.height() / 20.0),
         );
+        let lit = db >= threshold || (level == 9 && reading.clip);
         ui.painter()
-            .rect_filled(led, 0.0, if level < value { ACID } else { BORDER });
+            .rect_filled(led, 0.0, if lit { meter_color(threshold) } else { BORDER });
     }
+    let hold = meter_position(meter_db(reading.hold));
+    if hold > 0.0 {
+        let y = rect.bottom() - hold * rect.height();
+        ui.painter().line_segment(
+            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+            egui::Stroke::new(1.0, INK),
+        );
+    }
+    ui.interact(
+        rect.expand(3.0),
+        ui.scope_id()
+            .with((rect.min.x.to_bits(), rect.min.y.to_bits())),
+        egui::Sense::hover(),
+    )
+    .on_hover_text(format!(
+        "{db:.1} dBFS | peak {:.1} dBFS{}",
+        meter_db(reading.hold),
+        if reading.clip { " | CLIP" } else { "" }
+    ));
 }
 
 pub(crate) fn mixer_button(
@@ -991,12 +1049,7 @@ impl App {
             "DELAY",
             rack.rect(974.0, y + 33.0, 32.0, 47.0),
         );
-        let meter = self
-            .panel
-            .meters
-            .get(&format!("{mixer}.meter"))
-            .copied()
-            .unwrap_or(0);
+        let meter = self.panel.studio_meters[row];
         mix_meter(ui, rack.rect(888.0, y + 38.0, 5.0, 40.0), meter);
         for (i, name) in ["DIST", "PCF", "COMP", "REV"].into_iter().enumerate() {
             let id = format!("{mixer}.{}", name.to_ascii_lowercase());
@@ -1160,6 +1213,38 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn peak_meter_uses_dbfs_and_draws_orange_and_latched_red() {
+        let ctx = egui::Context::default();
+        let orange = meter_color(-3.0);
+        let red = meter_color(0.0);
+        assert!((meter_db(0.5) + 6.0206).abs() < 0.001);
+        assert!((meter_position(-24.0) - 0.4).abs() < 0.001);
+        assert!((meter_position(-3.0) - 0.9).abs() < 0.001);
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            mix_meter(
+                ui,
+                Rect::from_min_size(egui::pos2(20.0, 20.0), Vec2::new(8.0, 100.0)),
+                orb_engine::studio::meter::Reading {
+                    peak: 0.8,
+                    hold: 1.2,
+                    clip: true,
+                },
+            );
+        });
+        out.textures_delta.clear();
+        assert!(
+            out.shapes
+                .iter()
+                .any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == orange))
+        );
+        assert!(
+            out.shapes
+                .iter()
+                .any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == red))
+        );
+    }
     use crate::model::Panel;
 
     #[test]

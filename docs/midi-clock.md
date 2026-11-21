@@ -10,6 +10,7 @@ Clock is a system message, independent from MIDI channels and CC assignments.
 2. Set the drum machine to external MIDI Clock and enable reception of Start/Stop.
 3. Select MASTER / OUT and the correct output port in ACID RECALL.
 4. Press Play. ACID RECALL sends Start and 24 Timing Clocks per quarter note. Stop sends Stop.
+   Studio Stop (including Space) always rewinds to measure 1, so the next Play sends Start.
    Starting from a nonzero location sends Song Position Pointer and Continue; the receiver
    must support these messages to resume at that position. Song Position Pointer has
    sixteenth-note resolution. Clock runs during playback, not while stopped.
@@ -35,7 +36,11 @@ the player renders 64-frame blocks; OFF retains its original 1024-frame calls.
 4. Start the drum machine. Start resets to the beginning; Continue resumes; Song Position
    Pointer locates in sixteenth notes. Playback begins at the next received Timing Clock.
 5. The BPM is estimated from timestamped pulses and follows changes (supported range
-   20–400 BPM). A bounded phase correction follows the clock without seeking on every pulse.
+   20–400 BPM). The global tempo shows the nominal received BPM, rounded to the nearest
+   whole BPM, independently from the audio follower's phase correction. Up to 96 pulse
+   intervals average timestamp jitter; three consistent intervals at a substantially
+   changed tempo restart the average to follow deliberate tempo changes promptly.
+   A bounded phase correction follows the clock without seeking on every pulse.
    Large discontinuities re-locate. All four machines and the sampler share this transport;
    enable TIME WARP on samples that should follow tempo without transposition.
 
@@ -49,8 +54,9 @@ the player renders 64-frame blocks; OFF retains its original 1024-frame calls.
    measurement or removal of the audio driver's latency.
 
 In slave mode local Play, tempo and locate changes do not override the external master.
-Local **Stop** is an emergency stop; the next external Start/Continue releases it. MIDI Stop
-holds position instead of the ordinary local bar rewind. If Clock disappears for 500 ms,
+Local **Stop** is an emergency stop and rewinds Studio to measure 1; the next external
+Start/Continue releases it. External Stop also rewinds Studio's local view. The master's
+Continue or Song Position Pointer still determines the position on resumption. If Clock disappears for 500 ms,
 playback stops and status shows CLOCK LOST. A new Start/Continue is required to resume.
 Disconnecting slave sync also halts playback instead of silently switching to free-running.
 
