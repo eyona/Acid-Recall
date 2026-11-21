@@ -26,7 +26,7 @@ mod common;
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 
 use common::{kit, manifest, samples, send, song, tables};
 use orb_engine::samples::Sample;
@@ -36,15 +36,14 @@ use orb_player::{Audio, CALL_FRAMES, Command, Player, Preview};
 
 struct Counting;
 
-static EVENTS: AtomicUsize = AtomicUsize::new(0);
-
 thread_local! {
     static ARMED: Cell<bool> = const { Cell::new(false) };
+    static EVENTS: Cell<usize> = const { Cell::new(0) };
 }
 
 fn note() {
     if ARMED.try_with(|a| a.get()).unwrap_or(false) {
-        EVENTS.fetch_add(1, Ordering::Relaxed);
+        let _ = EVENTS.try_with(|events| events.set(events.get() + 1));
     }
 }
 
@@ -72,11 +71,11 @@ static A: Counting = Counting;
 
 /// Runs `f` armed and returns the allocator events it caused.
 fn armed(f: impl FnOnce()) -> usize {
-    let before = EVENTS.load(Ordering::Relaxed);
+    let before = EVENTS.with(Cell::get);
     ARMED.with(|a| a.set(true));
     f();
     ARMED.with(|a| a.set(false));
-    EVENTS.load(Ordering::Relaxed) - before
+    EVENTS.with(Cell::get) - before
 }
 
 /// The counter works: an allocation made armed is counted.
@@ -84,6 +83,31 @@ fn armed(f: impl FnOnce()) -> usize {
 fn the_counter_counts() {
     let n = armed(|| drop(std::hint::black_box(vec![1u8; 10])));
     assert_eq!(n, 2);
+}
+
+#[test]
+fn parallel_armed_tests_do_not_count_each_others_allocations() {
+    use std::sync::{Arc, atomic::AtomicBool};
+    let start = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let worker_start = start.clone();
+    let worker_done = done.clone();
+    let worker = std::thread::spawn(move || {
+        while !worker_start.load(Ordering::Acquire) {
+            std::hint::spin_loop();
+        }
+        let count = armed(|| drop(std::hint::black_box(vec![1u8; 10])));
+        worker_done.store(true, Ordering::Release);
+        count
+    });
+    let local = armed(|| {
+        start.store(true, Ordering::Release);
+        while !done.load(Ordering::Acquire) {
+            std::hint::spin_loop();
+        }
+    });
+    assert_eq!(worker.join().unwrap(), 2);
+    assert_eq!(local, 0);
 }
 
 #[test]
