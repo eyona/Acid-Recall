@@ -113,6 +113,8 @@ impl Shot {
 }
 
 pub struct App {
+    pub audio_session: Option<orb_player::output::Session>,
+    pub audio_preferences: crate::audio::Preferences,
     pub(crate) settlement: u64,
     pub studio: crate::studio::StudioUi,
     pub panel: Panel,
@@ -147,7 +149,7 @@ pub struct App {
     /// The audio stream's health (None: no stream), checked every frame: a lost device or a
     /// stall is reported once (`App::check_audio`), as in `orb play` (task-139).
     pub audio_health: Option<orb_player::output::Health>,
-    audio_reported: bool,
+    pub(crate) audio_reported: bool,
     /// Where the box's OK button was drawn last (`App::error_ok_rect`).
     pub(crate) error_ok: Option<Rect>,
     /// The errors of the action running, shown as one box when it ends (`App::action`).
@@ -217,6 +219,8 @@ impl App {
     pub fn new(panel: Panel, shot: Option<Shot>) -> Self {
         Self {
             studio: crate::studio::StudioUi::default(),
+            audio_session: None,
+            audio_preferences: Default::default(),
             settlement: 0,
             panel,
             link: None,
@@ -601,6 +605,10 @@ impl App {
 
     /// Draws the whole panel in the free area of `ui` and handles the input.
     pub fn show(&mut self, ui: &mut Ui) {
+        if let Some(audio) = &mut self.audio_session {
+            audio.poll();
+        }
+        self.audio_preferences_ui(ui.ctx());
         self.panel.restart_on_stop = self.studio.modern;
         self.studio.context = ui.ctx().clone();
         self.studio_poll(ui.ctx());

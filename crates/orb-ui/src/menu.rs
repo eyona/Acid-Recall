@@ -1274,6 +1274,10 @@ impl App {
                             });
                         }
                         ui.menu_button("Options", |ui| {
+                            if item(ui, "Preferences / Audio...", None) {
+                                self.audio_preferences.open = true;
+                                self.audio_preferences.draft = self.settings.audio.clone();
+                            }
                             if item(ui, "Sampler / 64-bar sequencer...", None) {
                                 self.studio.sampler_open = true;
                             }

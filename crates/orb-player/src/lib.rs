@@ -461,6 +461,8 @@ pub struct Audio {
     pending: Option<Box<Engine>>,
     commands: rtrb::Consumer<Command>,
     garbage: rtrb::Producer<Garbage>,
+    /// True only while the reclaimed engine is edited on the control thread.
+    retire_immediately: bool,
     snapshot: triple_buffer::Input<Snapshot>,
     tracks: triple_buffer::Input<Tracks>,
     /// The generation and revision of the last tracks published.
@@ -506,6 +508,7 @@ impl Player {
             pending: None,
             commands: cc,
             garbage: gp,
+            retire_immediately: false,
             snapshot: si,
             tracks: ti,
             tracks_published: None,
@@ -645,6 +648,39 @@ impl Player {
 }
 
 impl Audio {
+    /// Called only after reclaiming Audio from a closed device stream, on the control thread.
+    /// Keep the song and Studio assets, stop transport and discard old device-buffer leftovers.
+    pub(crate) fn prepare_device_change(&mut self) {
+        self.retire_immediately = true;
+        while let Ok(command) = self.commands.pop() {
+            self.apply(command);
+        }
+        self.apply(Command::StopReset);
+        self.retire_immediately = false;
+        self.preview_on = false;
+        self.pos = self.buffer_len;
+        if self.midi_clock.was_slave()
+            && self.midi_clock.input.period > 0
+            && (self.midi_clock.input.playing
+                || self
+                    .midi_clock
+                    .shared
+                    .bpm
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    > 0)
+        {
+            self.current
+                .set_tempo(clock::tempo_for_period(self.midi_clock.input.period));
+        }
+        self.midi_clock.begin_pull(self.frames);
+        self.midi_clock.master(
+            self.frames,
+            0,
+            false,
+            self.current.frame.seq.globals.tempo,
+            0,
+        );
+    }
     /// Configure before handing Audio to its callback; retained across song changes.
     pub fn set_independent_hats(&mut self, independent: bool) {
         self.independent_hats = independent;
@@ -849,6 +885,10 @@ impl Audio {
     }
 
     fn throw(&mut self, g: Garbage) {
+        if self.retire_immediately {
+            drop(g);
+            return;
+        }
         // `call` keeps GARBAGE_PER_COMMAND slots free for every command it applies
         if let Err(rtrb::PushError::Full(g)) = self.garbage.push(g) {
             // unreachable; leak rather than free memory in the callback

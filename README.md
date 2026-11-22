@@ -23,7 +23,11 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
-## Latest preview — 21 November 2026
+## Latest preview — 22 November 2026
+
+- **Audio preferences:** choose **ASIO or WASAPI** on Windows x64 under
+  **Options > Preferences / Audio...**, then select the device, stereo outputs, sample rate
+  and buffer size. Settings save locally; changing audio keeps the loaded song and samples.
 
 - **MIDI Clock IN:** stable nominal-tempo display, independent from phase correction;
   adaptive pulse averaging follows tempo changes while rejecting timestamp jitter.

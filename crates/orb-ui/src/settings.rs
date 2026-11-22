@@ -29,6 +29,7 @@ pub const MAX_RECENT: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
+    pub audio: orb_player::output::Config,
     /// MIDI port, pickup preference and controller assignments (separate from .rbs songs).
     pub midi: crate::midi::Config,
     pub sidechain: crate::sidechain::Settings,
@@ -60,6 +61,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            audio: Default::default(),
             midi: crate::midi::Config::default(),
             sidechain: crate::sidechain::Settings::default(),
             closed_hat_level: None,
@@ -118,6 +120,7 @@ pub fn default_file() -> Option<PathBuf> {
 /// What the file holds, in the file's order.
 #[derive(Serialize)]
 struct Stored<'a> {
+    audio: &'a orb_player::output::Config,
     #[serde(skip_serializing_if = "Option::is_none")]
     songs_dir: Option<&'a Path>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -176,6 +179,10 @@ impl Settings {
             s.midi = v.clone().try_into().unwrap_or_default();
             s.midi.sanitize();
         }
+        if let Some(v) = table.get("audio") {
+            s.audio = v.clone().try_into().unwrap_or_default();
+            s.audio.sanitize();
+        }
         if let Some(v) = table.get("sidechain") {
             s.sidechain = v.clone().try_into().unwrap_or_default();
             s.sidechain.sanitize();
@@ -230,6 +237,7 @@ impl Settings {
             return Ok(());
         };
         let text = toml::to_string(&Stored {
+            audio: &self.audio,
             midi: &self.midi,
             sidechain: &self.sidechain,
             closed_hat_level: self.closed_hat_level,

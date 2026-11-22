@@ -713,6 +713,15 @@ impl Midi {
 }
 
 impl App {
+    /// Reconnect the same saved MIDI ports after a potentially slow audio-driver change.
+    pub(crate) fn pause_midi_for_audio_change(&mut self) {
+        self.midi.inputs.clear();
+        self.midi.clock_input = None;
+        self.midi.clock.stop();
+        self.midi.router.reset();
+        self.midi.started = false;
+    }
+
     pub(crate) fn midi_tick(&mut self, ctx: &Context) {
         let mut changed = false;
         for action in context::take(ctx) {

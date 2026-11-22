@@ -26,6 +26,11 @@ rm -rf "$dist/$target/stage"
 mkdir -p "$stage"
 cp "$dist/$target/bin/"* "$stage/"
 cp "$root/LICENSE" "$stage/LICENSE"
+if [ "$target" = x86_64-pc-windows-msvc ]; then
+    mkdir -p "$stage/sources"
+    cp "$root/.build-tools/asio/sdk/ASIOSDK/LICENSE.txt" "$stage/LICENSE-ASIO-SDK.txt"
+    cp "$root/.build-tools/asio/ASIO-SDK_2.3.4_2025-10-15.zip" "$stage/sources/"
+fi
 
 case $target in
     *-windows-*) run="OpenRB-338.exe (the app) and orb.exe (the command line)" ;;

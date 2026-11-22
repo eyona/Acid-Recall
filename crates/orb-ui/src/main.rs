@@ -123,6 +123,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, Exit> {
                     Some("sampler") => "sampler".into(),
                     Some("space") => "space".into(),
                     Some("warp") => "warp".into(),
+                    Some("audio") => "audio".into(),
                     _ => return Err(Exit::Bad),
                 });
             }
@@ -233,13 +234,14 @@ fn main() -> eframe::Result {
     }
 
     let panel = if demo { Panel::demo() } else { Panel::new() };
+    let settings = Settings::load();
     let mut link = None;
     let mut app_samples = None;
     let mut startup = None;
     // errors of the start, shown in the message box once the app is up (task-130)
     let mut start_errors: Vec<String> = Vec::new();
     // keeps the audio stream alive for the whole run
-    let mut _stream = None;
+    let mut audio_session = None;
     let mut audio_health = None;
     if !demo {
         let samples = Some(rbm::standard::builtin_samples());
@@ -260,18 +262,19 @@ fn main() -> eframe::Result {
                 }
             }
         }
-        match orb_player::output::start(audio) {
-            Ok(s) => {
-                audio_health = Some(s.health());
-                _stream = Some(s);
-            }
-            Err(e) => {
-                eprintln!("OpenRB-338: audio output: {e}; the panel runs without sound");
-                // the one failure at the launch is an error the user expects to hear of: the
-                // box. Later audio errors repeat: `App::notify`.
-                start_errors.push(format!("Audio output: {e}; the panel runs without sound"));
+        let mut session = orb_player::output::Session::new(audio);
+        if let Err(e) = session.apply(&settings.audio) {
+            start_errors.push(format!("Saved audio output: {e}"));
+            if settings.audio != orb_player::output::Config::default()
+                && let Err(fallback) = session.apply(&orb_player::output::Config::default())
+            {
+                start_errors.push(format!(
+                    "Default audio output: {fallback}. Open Options > Preferences / Audio to retry."
+                ));
             }
         }
+        audio_health = session.stream().map(|s| s.health());
+        audio_session = Some(session);
         link = Some(l);
     }
 
@@ -325,6 +328,7 @@ fn main() -> eframe::Result {
             };
             app.samples = app_samples;
             app.audio_health = audio_health;
+            app.audio_session = audio_session;
             app.menu = true;
             app.studio.modern = true;
             if demo {
@@ -348,7 +352,7 @@ fn main() -> eframe::Result {
                 }
             }
             app.enable_logo_anim();
-            app.settings = Settings::load();
+            app.settings = settings;
             // the song (or the new empty song) and its mod's startup sound; nothing in the demo,
             // which has no player
             // (the errors of the start are one box)
@@ -368,6 +372,8 @@ fn main() -> eframe::Result {
                 }
             });
             if let Some(view) = studio_view {
+                app.audio_preferences.open = view == "audio";
+                app.audio_preferences.draft = app.settings.audio.clone();
                 app.studio.sampler_open = view == "sampler";
                 app.studio.reverb_open = view == "space";
                 if view == "warp" {

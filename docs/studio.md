@@ -2,6 +2,40 @@
 
 [ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-controller.md)
 
+## Audio driver, device and latency
+
+Open **Options > Preferences / Audio...**. The Windows x64 preview includes **WASAPI**
+and **ASIO**. A new setup uses the Windows default output through WASAPI; ASIO is selected
+explicitly and remembered. Install your audio interface's **64-bit Windows ASIO driver**
+to see it in the ASIO device list. Other platforms show their available native backends;
+Windows ARM64 currently retains WASAPI. Audio preferences are separate from MIDI ports.
+
+Choose the **Driver**, **Device**, **Stereo outputs** (1/2, 3/4, etc.), **Sample rate** and
+**Buffer size**, then click **APPLY**. The active backend/device, rate and observed callback
+buffer are shown below the controls. Automatic rate selection prefers 44.1 kHz; other
+rates use the existing resampler. The buffer's millisecond figure describes one buffer,
+not total round-trip latency or MIDI latency. MIDI Clock offsets remain separate settings.
+
+Smaller buffers reduce device buffering but can cause crackles on an overloaded machine.
+If a driver refuses a fixed size, use **Driver default** or adjust it in the manufacturer's
+control panel. The observed buffer shows what callbacks actually deliver; some drivers
+choose their own size. Device capabilities and driver acceptance determine available values.
+
+Changing backend, **Refresh devices**, and APPLY stop playback. The loaded song, sampler
+audio and settings stay in memory; MIDI ports reconnect using their existing assignments.
+In MIDI Clock IN, restart transport on the external master afterwards. Driver enumeration
+can briefly pause the interface because ASIO permits only one loaded driver at a time.
+
+If opening the new output fails, Acid Recall tries the previous output. A missing saved
+output at startup falls back to the system default when possible. If neither opens, the
+session remains available: reconnect the device, refresh, choose an output and Apply.
+**Reset to system default** prepares the default selection; click Apply to save it.
+Audio preferences are local to this computer, not embedded in portable `.orb338` projects.
+
+The portable ZIP needs no ASIO SDK or LLVM installation to run. It includes the ASIO SDK
+license and corresponding SDK source archive under `sources/` for the GPLv3 integration.
+ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+
 ## Quick start: MIDI Learn and TR balance
 
 1. Connect your controller and select its input in **Options > MIDI Controller...**.

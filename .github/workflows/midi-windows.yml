@@ -17,6 +17,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Prepare ASIO SDK and LLVM
+        shell: pwsh
+        run: . ./scripts/setup-asio.ps1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           cache-on-failure: true
@@ -87,6 +90,9 @@ jobs:
           Copy-Item docs/sidechain.md midi-preview/README-SIDECHAIN.md
           Copy-Item docs/studio.md midi-preview/README-STUDIO.md
           Copy-Item docs/LICENSE-SYMPHONIA.txt midi-preview/LICENSE-SYMPHONIA.txt
+          Copy-Item .build-tools/asio/sdk/ASIOSDK/LICENSE.txt midi-preview/LICENSE-ASIO-SDK.txt
+          New-Item -ItemType Directory -Force -Path midi-preview/sources
+          Copy-Item .build-tools/asio/ASIO-SDK_2.3.4_2025-10-15.zip midi-preview/sources/
           foreach ($studioView in @('sampler', 'space')) {
             $studioPreviewPath = 'graphite-preview/' + $studioView + '.png'
             if (Test-Path -LiteralPath $studioPreviewPath) { Copy-Item -LiteralPath $studioPreviewPath -Destination midi-preview/ }
@@ -138,7 +144,14 @@ jobs:
           MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
           hardware timing still needs testing on real interfaces and external machines.
 
-          ## Latest changes — 21 November 2026
+          ## Latest changes — 22 November 2026
+
+          - **ASIO / WASAPI audio preferences:** open Options > Preferences / Audio to
+            choose the backend, audio device, stereo outputs, sample rate and buffer size.
+            APPLY saves the choice locally and keeps the song and samples loaded while
+            stopping playback. Failed changes try the previous output; missing saved
+            outputs fall back to the system default when possible. ASIO needs the
+            interface's installed 64-bit driver. Active backend and observed buffer are shown.
 
           - **MIDI Clock IN:** the global tempo shows nominal received BPM with proper
             rounding, independently from phase corrections. Adaptive timestamp averaging

@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn audio_device_change_preserves_nominal_slave_tempo_after_midi_is_paused() {
+    let (mut player, mut audio) =
+        crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);
+    let connection = player.take_midi_clock().unwrap();
+    connection.shared.mode.store(SLAVE, Ordering::Release);
+    connection
+        .shared
+        .input_offset_ms
+        .store(30, Ordering::Release);
+    connection.shared.write(InputFrame {
+        at: connection.shared.now(),
+        tick: 0,
+        period: 17_857_143,
+        playing: true,
+        generation: 1,
+    });
+    audio.render_i16(&mut [0; 128]);
+    assert!(audio.current.frame.seq.globals.tempo < 140_000);
+    connection.shared.mode.store(OFF, Ordering::Release);
+    audio.prepare_device_change();
+    assert_eq!(audio.current.frame.seq.globals.tempo, 140_000);
+    assert!(!audio.current.playing());
+}
+
+#[test]
 fn slave_tempo_changes_adapt_without_seeks_or_retriggering() {
     let (mut player, mut audio) =
         crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);

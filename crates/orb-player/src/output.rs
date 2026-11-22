@@ -25,6 +25,9 @@ use rubato::{
 
 use crate::{Audio, CALL_FRAMES, RATE};
 
+mod preferences;
+pub use preferences::{Catalog, Config, DeviceInfo, Session, backends, default_backend};
+
 /// The frames converted per step of a device callback.
 const SCRATCH_FRAMES: usize = 1024;
 
@@ -47,6 +50,7 @@ fn err(what: &str, e: impl std::fmt::Display) -> Error {
 /// A running output stream; dropping it stops the sound.
 pub struct Stream {
     _stream: cpal::Stream,
+    pub backend: String,
     /// The device's name.
     pub device: String,
     /// The stream's configuration.
@@ -72,6 +76,10 @@ impl Stream {
     /// A handle on the stream's health that outlives borrowing the stream (the UI keeps it).
     pub fn health(&self) -> Health {
         self.health.clone()
+    }
+
+    pub fn callback_frames(&self) -> usize {
+        self.health.0.callback_frames.load(Ordering::Relaxed)
     }
 }
 
@@ -110,6 +118,7 @@ pub const LOG_EVERY_MS: u64 = 1000;
 pub struct Health(Arc<HealthInner>);
 
 struct HealthInner {
+    callback_frames: AtomicUsize,
     /// The time of the last data callback.
     last_data: AtomicU64,
     /// Whether an error came after the last data callback.
@@ -132,6 +141,7 @@ impl Health {
     /// A rule whose stream started at `now` ms.
     fn new(now: u64) -> Self {
         Health(Arc::new(HealthInner {
+            callback_frames: AtomicUsize::new(0),
             last_data: AtomicU64::new(now),
             pending: AtomicBool::new(false),
             fatal: AtomicBool::new(false),
@@ -264,6 +274,7 @@ const NO_LOG: u64 = u64::MAX;
 pub struct Output {
     audio: Audio,
     channels: usize,
+    output_pair: usize,
     resampler: Option<Resample>,
     scratch: Box<[f32; 2 * SCRATCH_FRAMES]>,
 }
@@ -353,8 +364,33 @@ impl Resample {
 impl Output {
     /// `audio` for a device of `channels` channels at `rate` Hz (resampled unless 44100).
     pub fn new(audio: Audio, channels: usize, rate: u32) -> Result<Self, Error> {
+        Self::new_routed(audio, channels, rate, 0)
+    }
+
+    pub fn new_routed(
+        audio: Audio,
+        channels: usize,
+        rate: u32,
+        output_pair: usize,
+    ) -> Result<Self, Error> {
+        Self::prepare(&mut Some(audio), channels, rate, output_pair)
+    }
+
+    fn prepare(
+        audio: &mut Option<Audio>,
+        channels: usize,
+        rate: u32,
+        output_pair: usize,
+    ) -> Result<Self, Error> {
         if channels == 0 {
             return Err(Error("a device with no channels".into()));
+        }
+        if (channels == 1 && output_pair != 0)
+            || (channels > 1 && output_pair.saturating_add(1) >= channels)
+        {
+            return Err(Error(
+                "The selected stereo output pair is unavailable".into(),
+            ));
         }
         let resampler = if rate == RATE {
             None
@@ -362,8 +398,11 @@ impl Output {
             Some(Resample::new(rate)?)
         };
         Ok(Output {
-            audio,
+            audio: audio
+                .take()
+                .ok_or_else(|| Error("Audio engine is still held by the previous driver".into()))?,
             channels,
+            output_pair,
             resampler,
             scratch: Box::new([0.0; 2 * SCRATCH_FRAMES]),
         })
@@ -397,11 +436,9 @@ impl Output {
                 if ch == 1 {
                     f[0] = T::from_sample((lr[0] + lr[1]) * 0.5);
                 } else {
-                    f[0] = T::from_sample(lr[0]);
-                    f[1] = T::from_sample(lr[1]);
-                    for x in &mut f[2..] {
-                        *x = silent;
-                    }
+                    f.fill(silent);
+                    f[self.output_pair] = T::from_sample(lr[0]);
+                    f[self.output_pair + 1] = T::from_sample(lr[1]);
                 }
             }
         }
@@ -409,6 +446,10 @@ impl Output {
 
     pub fn audio(&self) -> &Audio {
         &self.audio
+    }
+
+    fn into_audio(self) -> Audio {
+        self.audio
     }
 
     /// For tests: the resampled frames not yet handed out are dropped, and the next resampler
@@ -452,18 +493,36 @@ fn choose(device: &cpal::Device) -> Result<(StreamConfig, SampleFormat), Error> 
     Ok((c.config(), c.sample_format()))
 }
 
+struct CallbackOutput {
+    output: Option<Output>,
+    returned: Option<rtrb::Producer<Output>>,
+}
+
+impl Drop for CallbackOutput {
+    fn drop(&mut self) {
+        if let Some(queue) = &mut self.returned
+            && let Some(output) = self.output.take()
+        {
+            let _ = queue.push(output);
+        }
+    }
+}
+
 fn build<T: SizedSample + FromSample<f32>>(
     device: &cpal::Device,
     config: StreamConfig,
-    mut out: Output,
+    mut out: CallbackOutput,
     health: Health,
 ) -> Result<cpal::Stream, Error> {
     let h = health.clone();
+    let channels = config.channels as usize;
     device
         .build_output_stream::<T, _, _>(
             config,
             move |data: &mut [T], _| {
-                out.fill(data);
+                out.output.as_mut().unwrap().fill(data);
+                h.0.callback_frames
+                    .store(data.len() / channels, Ordering::Relaxed);
                 h.data(h.now());
             },
             move |e: cpal::Error| {
@@ -494,6 +553,10 @@ pub fn start(audio: Audio) -> Result<Stream, Error> {
         .unwrap_or_else(|_| "?".into());
     let (config, format) = choose(&device)?;
     let out = Output::new(audio, config.channels as usize, config.sample_rate)?;
+    let out = CallbackOutput {
+        output: Some(out),
+        returned: None,
+    };
     let resampled = config.sample_rate != RATE;
     let health = Health::started();
     let f = health.clone();
@@ -510,6 +573,7 @@ pub fn start(audio: Audio) -> Result<Stream, Error> {
     stream.play().map_err(|e| err("starting the stream", e))?;
     Ok(Stream {
         _stream: stream,
+        backend: host.id().name().into(),
         device: name,
         config,
         format,
@@ -521,6 +585,119 @@ pub fn start(audio: Audio) -> Result<Stream, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_change_applies_queued_edits_then_stops_pending_play_and_audition() {
+        let (mut player, mut audio) =
+            crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);
+        let mut studio = orb_engine::studio::Studio::new(Box::new(
+            orb_engine::studio::convolution::Convolver::new(&[[0.0; 2]; 64]).unwrap(),
+        ));
+        studio.sampler.replace(
+            0,
+            Some(Box::new(orb_engine::studio::audio_file::Wave {
+                frames: vec![[0.8; 2]; 44100],
+            })),
+        );
+        audio.current.frame.studio = Some(Box::new(studio));
+        // More replacements than the callback's garbage queue can hold: reclamation here
+        // happens on the control thread, so no edit may be leaked or left to restart later.
+        for _ in 0..crate::GARBAGE + 8 {
+            let settings = orb_engine::studio::Settings {
+                return_gain: 0.73,
+                ..orb_engine::studio::Settings::default()
+            };
+            player
+                .send(crate::Command::StudioSettings(Box::new(settings)))
+                .ok()
+                .unwrap();
+        }
+        player.send(crate::Command::Play).ok().unwrap();
+        player.send(crate::Command::StudioAudition(0)).ok().unwrap();
+        audio.prepare_device_change();
+        assert!(!audio.current.playing());
+        assert_eq!(
+            audio
+                .current
+                .frame
+                .studio
+                .as_ref()
+                .unwrap()
+                .settings
+                .return_gain,
+            0.73
+        );
+        let mut output = [0; 2048];
+        audio.render_i16(&mut output);
+        assert!(!audio.current.playing());
+        assert!(output.iter().all(|&s| s == 0));
+        assert_eq!(player.collect_garbage(), 0);
+    }
+
+    fn test_audio() -> Audio {
+        let (_, mut audio) = crate::Player::new(Arc::new(orb_engine::tables::Tables::new()), None);
+        let mut studio = orb_engine::studio::Studio::new(Box::new(
+            orb_engine::studio::convolution::Convolver::new(&[[0.0; 2]; 64]).unwrap(),
+        ));
+        studio.sampler.replace(
+            0,
+            Some(Box::new(orb_engine::studio::audio_file::Wave {
+                frames: vec![[0.4, -0.3]; 44100],
+            })),
+        );
+        studio.sampler.audition(0);
+        audio.current.frame.studio = Some(Box::new(studio));
+        audio
+    }
+
+    #[test]
+    fn selected_pair_gets_exact_stereo_and_other_outputs_stay_silent() {
+        let mut stereo = Output::new(test_audio(), 2, 44100).unwrap();
+        let mut routed = Output::new_routed(test_audio(), 6, 44100, 2).unwrap();
+        let mut reference = vec![0.0_f32; 2048];
+        let mut result = vec![0.0_f32; 6144];
+        stereo.fill(&mut reference);
+        routed.fill(&mut result);
+        assert!(reference.iter().any(|v| v.abs() > 0.01));
+        for (expected, frame) in reference
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(result.as_chunks::<6>().0)
+        {
+            assert_eq!(&frame[2..4], expected);
+            assert_eq!([frame[0], frame[1], frame[4], frame[5]], [0.0; 4]);
+        }
+    }
+
+    #[test]
+    fn closing_a_callback_returns_the_original_engine_and_assets_to_the_control_thread() {
+        let audio = test_audio();
+        let studio = &**audio.current.frame.studio.as_ref().unwrap() as *const _ as usize;
+        let output = Output::new(audio, 2, 44100).unwrap();
+        let (sender, mut receiver) = rtrb::RingBuffer::new(1);
+        let callback = CallbackOutput {
+            output: Some(output),
+            returned: Some(sender),
+        };
+        drop(callback);
+        let output = receiver.pop().ok().unwrap();
+        let mut audio = output.into_audio();
+        assert_eq!(
+            &**audio.current.frame.studio.as_ref().unwrap() as *const _ as usize,
+            studio
+        );
+        audio.prepare_device_change();
+        assert!(!audio.current.playing());
+        assert_eq!(audio.current.frame.seq.tick_pos(), 0);
+    }
+
+    #[test]
+    fn invalid_routing_keeps_the_engine_available_for_recovery() {
+        let mut audio = Some(test_audio());
+        assert!(Output::prepare(&mut audio, 2, 44100, 2).is_err());
+        assert!(audio.is_some());
+    }
 
     const ERR: &str = "snd_pcm_avail_delay: I/O error";
 
