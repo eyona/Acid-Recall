@@ -85,7 +85,8 @@ WARP timing row and expandable GATER / SIDECHAIN controls. AUTO CUT remains alon
 ONE SHOT, GATE, LOOP and REVERSE; the sequence is below the editing area.
 
 TR patterns default to sixteen steps. LENGTH **32 / 64** reveals pages of sixteen steps,
-FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE without moving the voice knobs. Groove Generator
+FOLLOW, COPY, PASTE and DUP in the free space on the left. The rack keeps the same size
+and control positions at every length. Groove Generator
 uses the entire selected length. Save extended patterns in **.recall** projects; the legacy
 **.rbs** format retains only the native first sixteen steps. Shortening a pattern hides
 later pages without deleting their notes.

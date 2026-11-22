@@ -11,8 +11,11 @@ The sound switches use **CON**, **CLA** and **MAR**; hover for their full names.
 sixteen steps. Click a page miniature to edit it; **FOLLOW** follows the playback page.
 Clicking a page manually turns FOLLOW off so playback does not move your editing view.
 
-**COPY PAGE / PASTE PAGE** copy all twelve instrument lanes, including accents and 909
-velocity/flam values. **DUPLICATE** copies to the next page within the chosen length.
+Page selectors appear below the pattern controls on the left. Switching between 16, 32
+and 64 steps keeps the rack size and all knobs, step buttons, sampler and effects fixed.
+
+**COPY / PASTE** copy all twelve instrument lanes, including accents and 909
+velocity/flam values. **DUP** copies to the next page within the chosen length.
 Choose a longer length first if you want to extend the final page.
 
 Reducing the length hides later pages without deleting their notes. Increasing it again

@@ -99,7 +99,6 @@ struct Rack {
 }
 
 impl Rack {
-    #[cfg(test)]
     fn fit(avail: Rect) -> Self {
         Self::fit_height(avail, HEIGHT)
     }
@@ -210,8 +209,8 @@ fn fitted_button_font(ui: &Ui, rect: Rect, text: &str, preferred: f32, scale: f3
 }
 
 /// Slots under each TB's routing buttons, reserved for its independent sidechain controls.
-pub(crate) fn sidechain_areas(avail: Rect, extra_height: f32) -> [Rect; 2] {
-    let rack = Rack::fit_height(avail, HEIGHT + extra_height);
+pub(crate) fn sidechain_areas(avail: Rect) -> [Rect; 2] {
+    let rack = Rack::fit(avail);
     [0, 1].map(|row| rack.rect(858.0, ROWS[row].0 + 119.0, 176.0, 39.0))
 }
 
@@ -439,33 +438,16 @@ pub(crate) fn mixer_button(
 }
 
 impl App {
-    pub(crate) fn graphite_extra_height(&self) -> f32 {
-        [2, 3]
-            .into_iter()
-            .filter(|&row| self.drum_length(row) > 16)
-            .count() as f32
-            * 82.0
-    }
     /// Draw transport, four instruments and their mixer strips. The caller embeds the sampler
     /// and effects in the returned rectangles, in screen coordinates.
     pub(crate) fn graphite_rack(&mut self, ui: &mut Ui, avail: Rect) -> (Rect, Rect) {
-        let extra = [2, 3].map(|row| {
-            if self.drum_length(row) > 16 {
-                82.0
-            } else {
-                0.0
-            }
-        });
-        let extra_height = extra.iter().sum::<f32>();
-        let rack = Rack::fit_height(avail, HEIGHT + extra_height);
+        let rack = Rack::fit(avail);
         ui.painter()
             .rect_filled(avail, 0.0, Color32::from_rgb(12, 14, 14));
         let active = !self.browsing() && !self.prompting() && !self.error_open();
         ui.add_enabled_ui(active, |ui| {
             self.rack_transport(ui, rack);
-            for (row, &(base_y, base_h)) in ROWS.iter().enumerate() {
-                let y = base_y + if row == 3 { extra[0] } else { 0.0 };
-                let h = base_h + if row >= 2 { extra[row - 2] } else { 0.0 };
+            for (row, &(y, h)) in ROWS.iter().enumerate() {
                 rack.card(ui, rack.rect(14.0, y, 1030.0, h));
                 ui.painter().rect_filled(
                     rack.rect(14.0, y + 10.0, 3.0, h - 20.0),
@@ -552,8 +534,8 @@ impl App {
         });
         self.rack_advanced(ui);
         (
-            rack.rect(14.0, 962.0 + extra_height, 1030.0, 320.0),
-            rack.rect(1058.0, 84.0, 208.0, 1202.0 + extra_height),
+            rack.rect(14.0, 962.0, 1030.0, 320.0),
+            rack.rect(1058.0, 84.0, 208.0, 1202.0),
         )
     }
 
@@ -1025,8 +1007,7 @@ impl App {
                 self.panel.inst909
             };
             let value = self.drum_step(row, instrument, global_step);
-            let step_y = if length > 16 { 266.0 } else { 226.0 };
-            let rect = rack.rect(224.0 + step as f32 * 38.0, y + step_y, 34.0, 19.0);
+            let rect = rack.rect(224.0 + step as f32 * 38.0, y + 226.0, 34.0, 19.0);
             let response = button(
                 ui,
                 rack,
@@ -1104,9 +1085,13 @@ impl App {
         } else {
             self.panel.inst909
         };
-        let width = 608.0 / (length / 16) as f32;
+        // Extended phrases use the free space under the pattern controls, so changing
+        // length never resizes the rack or moves its knobs, steps, sampler or effects.
+        let width = 90.0;
         for p in 0..length / 16 {
-            let rect = rack.rect(224.0 + p as f32 * width, y + 226.0, width - 5.0, 31.0);
+            let x = 28.0 + (p % 2) as f32 * width;
+            let page_y = y + 150.0 + (p / 2) as f32 * 27.0;
+            let rect = rack.rect(x, page_y, width - 5.0, 24.0);
             if button(
                 ui,
                 rack,
@@ -1121,32 +1106,30 @@ impl App {
                 follow = false;
             }
             for s in 0..16 {
-                let x = 228.0 + p as f32 * width + s as f32 * (width - 13.0) / 16.0;
+                let step_x = x + 4.0 + s as f32 * (width - 13.0) / 16.0;
                 let color = if self.drum_step(row, instrument, p * 16 + s) > 0 {
                     ACID
                 } else {
                     BORDER
                 };
                 ui.painter().rect_filled(
-                    rack.rect(x, y + 249.0, (width - 22.0) / 16.0, 4.0),
+                    rack.rect(step_x, page_y + 19.0, (width - 22.0) / 16.0, 3.0),
                     0.0,
                     color,
                 );
             }
         }
         let clipboard = egui::Id::unique("drum-page-clipboard");
-        for (i, label) in ["COPY PAGE", "PASTE PAGE", "DUPLICATE"]
-            .into_iter()
-            .enumerate()
-        {
+        for (i, label) in ["COPY", "PASTE", "DUP"].into_iter().enumerate() {
             if button(
                 ui,
                 rack,
-                rack.rect(224.0 + i as f32 * 91.0, y + 294.0, 86.0, 20.0),
+                rack.rect(28.0 + i as f32 * 60.0, y + 207.0, 55.0, 18.0),
                 (row, label),
                 label,
                 false,
             )
+            .on_hover_text(["Copy page", "Paste page", "Duplicate to next page"][i])
             .clicked()
             {
                 match i {
@@ -1171,7 +1154,7 @@ impl App {
         }
         ui.scope_builder(
             egui::UiBuilder::new()
-                .max_rect(rack.rect(730.0, y + 294.0, 102.0, 22.0))
+                .max_rect(rack.rect(28.0, y + 228.0, 176.0, 20.0))
                 .id_salt(("drum-follow-control", row)),
             |ui| {
                 ui.checkbox(&mut follow, "FOLLOW");
@@ -1462,30 +1445,149 @@ mod tests {
     }
 
     #[test]
-    fn extended_pages_and_tb_sidechain_share_the_expanded_rack_transform() {
+    fn extended_phrases_keep_the_entire_rack_geometry_stable() {
+        fn labels(shape: &egui::Shape, found: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Text(text) => {
+                    found.push((
+                        text.galley.text().into(),
+                        text.galley.rect.translate(text.pos.to_vec2()),
+                    ));
+                }
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        labels(shape, found);
+                    }
+                }
+                _ => {}
+            }
+        }
         let ctx = egui::Context::default();
         let mut app = App::new(crate::model::Panel::new(), None);
-        let canvas = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT + 164.0));
-        for lengths in [[16, 16], [32, 16], [64, 32]] {
+        let canvas = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT) * 0.9);
+        let rack = Rack::fit(canvas);
+        let mut baseline = None;
+        for lengths in [[16, 16], [32, 16], [64, 32], [64, 64], [16, 64], [16, 16]] {
             for (i, length) in lengths.into_iter().enumerate() {
                 app.drum_set_length(i + 2, length);
             }
-            let extra = app.graphite_extra_height();
-            let rack = Rack::fit_height(canvas, HEIGHT + extra);
+            let mut panels = None;
             let mut output = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(canvas),
                     ..Default::default()
                 },
                 |ui| {
-                    app.graphite_rack(ui, canvas);
+                    panels = Some(app.graphite_rack(ui, canvas));
                 },
             );
-            for (row, area) in sidechain_areas(canvas, extra).into_iter().enumerate() {
+            let mut text = Vec::new();
+            for shape in &output.shapes {
+                labels(&shape.shape, &mut text);
+            }
+            let stable: Vec<_> = text
+                .iter()
+                .filter(|(label, _)| {
+                    matches!(
+                        label.as_str(),
+                        "ACID RECALL"
+                            | "TB-303 A"
+                            | "TB-303 B"
+                            | "TR-808"
+                            | "TR-909"
+                            | "TUNE"
+                            | "MIX"
+                            | "BD"
+                            | "SWING"
+                    )
+                })
+                .cloned()
+                .collect();
+            let geometry = (panels.unwrap(), stable, sidechain_areas(canvas));
+            if let Some(ref expected) = baseline {
+                assert_eq!(&geometry, expected, "lengths {lengths:?}");
+            } else {
+                baseline = Some(geometry);
+            }
+            for (row, area) in sidechain_areas(canvas).into_iter().enumerate() {
                 assert_eq!(area, rack.rect(858.0, ROWS[row].0 + 119.0, 176.0, 39.0));
                 assert!(canvas.contains_rect(area));
             }
+            for (i, length) in lengths.into_iter().enumerate() {
+                let controls = rack.rect(28.0, ROWS[i + 2].0 + 150.0, 176.0, 98.0);
+                let pages: Vec<_> = text
+                    .iter()
+                    .filter(|(label, rect)| label.contains('·') && controls.contains_rect(*rect))
+                    .collect();
+                assert_eq!(pages.len(), if length > 16 { length / 16 } else { 0 });
+            }
             output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn compact_drum_pages_remain_clickable_and_edit_the_selected_page() {
+        fn frame(ctx: &egui::Context, app: &mut App, events: Vec<egui::Event>) {
+            let canvas = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT));
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(canvas),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    app.graphite_rack(ui, canvas);
+                },
+            );
+            output.textures_delta.clear();
+        }
+        fn click(ctx: &egui::Context, app: &mut App, pos: Pos2) {
+            frame(ctx, app, vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                frame(
+                    ctx,
+                    app,
+                    vec![egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    }],
+                );
+            }
+        }
+        for row in [2, 3] {
+            let ctx = egui::Context::default();
+            let mut app = App::new(Panel::new(), None);
+            let rack = Rack::fit(Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT)));
+            let y = ROWS[row].0;
+            frame(&ctx, &mut app, vec![]);
+            click(
+                &ctx,
+                &mut app,
+                rack.rect(166.0, y + 94.0, 33.0, 19.0).center(),
+            );
+            assert_eq!(app.drum_length(row), 64);
+            // Fourth page in the left two-by-two selector, then the unchanged first step.
+            click(
+                &ctx,
+                &mut app,
+                rack.rect(118.0, y + 177.0, 85.0, 24.0).center(),
+            );
+            let instrument = if row == 2 {
+                app.panel.inst808
+            } else {
+                app.panel.inst909
+            };
+            let first_page = app.drum_step(row, instrument, 0);
+            app.drum_set_step(row, instrument, 48, 0);
+            click(
+                &ctx,
+                &mut app,
+                rack.rect(224.0, y + 226.0, 34.0, 19.0).center(),
+            );
+            assert_eq!(app.drum_step(row, instrument, 48), 1);
+            assert_eq!(app.drum_step(row, instrument, 0), first_page);
         }
     }
 
@@ -1872,7 +1974,7 @@ mod tests {
             output.textures_delta.clear();
         }
         assert!(app.panel.toggle_on("master.comp"));
-        for area in sidechain_areas(rect, 0.0) {
+        for area in sidechain_areas(rect) {
             assert!(rect.contains_rect(area));
             assert!(area.left() > rect.center().x);
         }
