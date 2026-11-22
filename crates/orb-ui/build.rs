@@ -91,15 +91,14 @@ fn set_version(manifest: &Path) -> String {
         "cargo:rustc-env=ORB_UI_VERSION={}",
         version::version_string(secs, text)
     );
-    version::version_number(secs)
+    env::var("CARGO_PKG_VERSION").expect("application version")
 }
 
 /// The Windows resources of the exe (task-111), for a Windows target only: the app icon
 /// (`assets/app_icon.ico`, made by `ui-art ico`) as icon 1, which Explorer, the taskbar and the
 /// shortcuts show, and the version info (Details tab of the file's properties).
-/// `version` is `YYYY.MMDD.HHMM`
-/// (task-133), whose three numbers fit the four 16-bit fields of a Windows file version
-/// (year, MMDD, HHMM, 0). Cross builds (cargo-xwin on a Mac or Linux) compile the `.rc` with
+/// `version` is the application's semantic version. Its three numbers occupy the four
+/// fields of a Windows file version (major, minor, patch, 0). Cross builds compile the `.rc` with
 /// `llvm-rc`, which must be on PATH (docs/building.md); a failure fails the build rather than
 /// leaving the exe without its icon.
 fn embed_windows_resources(manifest: &Path, version: &str) {
