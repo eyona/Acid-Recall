@@ -305,6 +305,7 @@ pub struct Link {
     saved: Option<SavedBlocks>,
     /// The gain-reduction LEDs [`Link::moving`] saw last.
     shown_gr: Option<[u8; 9]>,
+    shown_sampler: [Option<orb_engine::studio::sampler::Playhead>; 8],
 }
 
 /// The device parameters the original's save writes for a song in song mode, as the engine
@@ -337,6 +338,7 @@ impl Link {
     pub fn new(tables: Arc<Tables>, samples: Option<Arc<SampleSet>>) -> (Link, Audio) {
         let kit = samples.clone();
         let (player, mut audio) = Player::new(tables, samples);
+        audio.set_independent_hats(true);
         // the new empty song's patterns, as its constructor made them
         let patterns = std::array::from_fn(|c| {
             audio.current_mut().frame.devices.channels[c]
@@ -361,6 +363,7 @@ impl Link {
             loaded_at: None,
             saved: None,
             shown_gr: None,
+            shown_sampler: [None; 8],
         };
         (link, audio)
     }
@@ -398,10 +401,17 @@ impl Link {
         let mark = self.mark;
         let s = self.player.snapshot();
         let (playing, frames) = (s.playing, s.frames);
+        let sampler_lit = s.sampler_meter.iter().any(|&v| v != 0);
+        let sampler_moving = s.sampler_playheads.iter().any(Option::is_some)
+            || self.shown_sampler != s.sampler_playheads;
+        self.shown_sampler = s.sampler_playheads;
         // the compressor's reduction holds its last value in silence: it moves only when it
         // changes
         let gr_moved = self.shown_gr.replace(panel.gr_leds) != Some(panel.gr_leds);
         playing
+            || s.studio_meters.iter().any(|m| m.hold > 0.0001 || m.clip)
+            || sampler_lit
+            || sampler_moving
             || frames <= mark
             || !self.backlog.is_empty()
             || panel.meters.values().any(|&m| m > 0)
@@ -422,6 +432,12 @@ impl Link {
 
     pub fn player(&mut self) -> &mut Player {
         &mut self.player
+    }
+
+    /// App effects use the same ordered queue and snapshot barrier as panel edits.
+    pub fn effect_command(&mut self, command: Command) {
+        self.backlog.push_back(command);
+        self.flush_marked();
     }
 
     /// The pattern arrays as the link knows them (the song's, with the panel's edits).
@@ -474,6 +490,10 @@ impl Link {
             panel.adopt(id, payloads[d as usize][c as usize] as i32);
         }
         let m = &payloads[Device::Mixer as usize];
+        panel.adopt(
+            "tr909.ch_level",
+            payloads[Device::Tr909 as usize][22] as i32,
+        );
         panel.adopt("master.fader", m[0] as i32);
         panel.adopt("mixer.comp_id", m[1] as i32);
         panel.adopt("mixer.pcf_id", m[2] as i32);
@@ -625,6 +645,28 @@ impl Link {
             data: data.to_vec(),
         };
         match e {
+            Event::PatternData {
+                row,
+                pattern,
+                bytes,
+            } => {
+                if *row >= 4 || *pattern >= 32 {
+                    return vec![];
+                }
+                let (_, plen, _) = layout(*row);
+                if bytes.len() != plen {
+                    return vec![];
+                }
+                let at = plen * usize::from(*pattern);
+                let Some(target) = self.patterns[*row].get_mut(at..at + plen) else {
+                    return vec![];
+                };
+                target.copy_from_slice(bytes);
+                let mut data = vec![*pattern];
+                data.extend_from_slice(bytes);
+                let d = ROW_DEVICES[*row];
+                vec![dev(d, header_sub(d) + 2, &data)]
+            }
             Event::Press { id } => match id.as_str() {
                 "transport.play" => vec![Msg::Global { id: 1, value: 1 }],
                 "transport.stop" => vec![Msg::Global { id: 1, value: 0 }],
@@ -846,7 +888,13 @@ impl Link {
         for e in &events {
             for m in self.messages(e) {
                 if let Some(c) = Self::command(&m) {
-                    self.backlog.push_back(c);
+                    self.backlog.push_back(
+                        if panel.restart_on_stop && matches!(c, Command::Stop) {
+                            Command::StopReset
+                        } else {
+                            c
+                        },
+                    );
                 }
                 if let Some(log) = &mut self.log {
                     log.push(m);
@@ -886,6 +934,8 @@ impl Link {
     /// Takes the engine's state into the panel.
     pub fn follow(&mut self, panel: &mut Panel) {
         let s = *self.player.snapshot();
+        panel.studio_meters = s.studio_meters;
+        panel.sampler_playheads = s.sampler_playheads;
         self.refresh_tracks();
         // the meters and the running lights follow every call
         for c in 0..4 {
@@ -920,7 +970,7 @@ impl Link {
         }
         let step = |d: Device, i: usize| {
             live(d, i)
-                .filter(|&b| s.playing && b < 16)
+                .filter(|&b| s.playing && b < 64)
                 .map(|b| b as usize)
         };
         panel.playing_step303 = [step(Device::Tb303_1, 9), step(Device::Tb303_2, 9)];
@@ -952,6 +1002,7 @@ impl Link {
         t.recording = s.recording && t.song_mode;
         panel.adopt("transport.shuffle", s.shuffle as i32);
         panel.vintage = s.vintage;
+        panel.adopt("tr909.ch_level", s.closed_hat_level as i32);
         self.saved = s.song_mode.then_some(SavedBlocks {
             blocks: s.saved,
             mixer: s.saved_mixer,

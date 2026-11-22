@@ -11,6 +11,31 @@ fn p(s: &str) -> PathBuf {
 }
 
 #[test]
+fn audio_driver_device_rate_buffer_and_pair_round_trip_separately_from_songs() {
+    let d = tempfile::tempdir().unwrap();
+    let file = d.path().join("audio.toml");
+    let mut settings = Settings::load_from(&file);
+    settings.audio = orb_player::output::Config {
+        backend: "ASIO".into(),
+        device: Some("asio:Test Audio Driver".into()),
+        sample_rate: Some(48000),
+        buffer_frames: Some(128),
+        output_pair: 2,
+    };
+    settings.save().unwrap();
+    assert_eq!(Settings::load_from(&file).audio, settings.audio);
+    fs::write(
+        &file,
+        "[audio]\nsample_rate = 0\nbuffer_frames = 0\noutput_pair = 65535\n",
+    )
+    .unwrap();
+    let loaded = Settings::load_from(&file).audio;
+    assert_eq!(loaded.sample_rate, None);
+    assert_eq!(loaded.buffer_frames, None);
+    assert_eq!(loaded.output_pair, 254);
+}
+
+#[test]
 fn the_settings_round_trip_through_toml() {
     let d = tempfile::tempdir().unwrap();
     let file = d.path().join("OpenRB-338").join("ui.toml");

@@ -13,6 +13,30 @@ The project is licensed GPL-3.0-only (`LICENSE` is the verbatim GPLv3 text; `lic
 
 ## Targets
 
+### Windows x64 ASIO preparation
+
+Windows x64 builds now enable CPAL 0.18.2's ASIO backend as well as WASAPI. Before invoking
+Cargo or `scripts/package.sh` on Windows x64, dot-source the setup script in PowerShell:
+
+```powershell
+. ./scripts/setup-asio.ps1
+cargo build --release --locked -p orb-ui
+```
+
+It downloads the official ASIO SDK 2.3.4 archive dated 2025-10-15 to `.build-tools/asio/`,
+verifies SHA-256 `D5EBF0C20DD2C5F43771FD0C1418F4B361BF52434EE670097CFA6B3A335E2ECA`,
+and sets `CPAL_ASIO_DIR`. It uses installed LLVM through `LIBCLANG_PATH`, or prepares the
+build-only `libclang==18.1.1` Python package locally. MSVC's C++ build tools are required.
+CI performs this setup before its Windows checks and packages. Users running the portable
+app need only the audio interface's driver; LLVM and the SDK are build dependencies.
+
+The SDK is used under its GPLv3 alternative. Windows x64 archives include its original
+`LICENSE.txt` and the matching source archive under `sources/`. SDK source/download:
+[Steinberg ASIO SDK](https://www.steinberg.net/asiosdk). Windows ARM64 keeps WASAPI and
+does not enable this ASIO dependency. Non-Windows builds keep their existing backends.
+
+### Platform packages
+
 Every OS has an amd64 and an arm64 variant:
 
 | Target | Package | Notes |

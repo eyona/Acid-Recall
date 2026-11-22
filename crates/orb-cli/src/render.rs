@@ -153,6 +153,12 @@ pub fn load_mod(path: &Path, builtin: &SampleSet) -> Result<SampleSet, Fail> {
 /// sets: the built-in drum samples (the embedded standard mod's, `rbm::standard`) and one set
 /// per mod file used.
 pub struct Renderer {
+    pub independent_hats: bool,
+    /// Optional prepared Studio session, consumed by the next offline render.
+    pub studio: Option<Box<orb_engine::studio::Studio>>,
+    pub closed_hat_level: Option<u8>,
+    /// Optional app extension; the default CLI and reference renders keep it disabled.
+    pub sidechain: orb_engine::sidechain::Config,
     pub tables: Arc<Tables>,
     mods: ModOpts,
     mod_sets: HashMap<PathBuf, Arc<SampleSet>>,
@@ -161,6 +167,10 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(mods: ModOpts) -> Self {
         Renderer {
+            independent_hats: false,
+            studio: None,
+            closed_hat_level: None,
+            sidechain: orb_engine::sidechain::Config::default(),
             tables: Arc::new(Tables::new()),
             mods,
             mod_sets: HashMap::new(),
@@ -172,6 +182,11 @@ impl Renderer {
     pub fn render(&mut self, label: &str, song: &Song, idle_blocks: u32) -> Result<Vec<i16>, Fail> {
         let samples = self.samples(label, song)?;
         let mut engine = Engine::new(self.tables.clone(), Devices::implemented(samples));
+        engine.frame.sidechain.set_config(self.sidechain);
+        engine.frame.devices.channels[3].set_closed_hat_level(self.closed_hat_level);
+        engine.frame.studio = self.studio.take();
+        engine.frame.sync_studio_drum_banks();
+        engine.frame.independent_hats = self.independent_hats;
         let samples = export::export_song(&mut engine, song, idle_blocks)
             .map_err(|r| fail(1, format!("{label}: {r}")))?;
         // A render call that faults in the original (the PCF's divide by zero) writes nothing;

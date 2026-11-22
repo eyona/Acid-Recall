@@ -43,6 +43,12 @@ pub enum Event {
     },
     /// The Clear button emptied a 303 pattern (sent whole, msg 41 sub 44).
     Clear303 { synth: usize, pattern: u8 },
+    /// A generated/restored whole pattern, with an explicit destination (including offscreen).
+    PatternData {
+        row: usize,
+        pattern: u8,
+        bytes: Vec<u8>,
+    },
 }
 
 /// The transport (ticks, 768 per bar).
@@ -73,7 +79,6 @@ impl Default for Transport {
         }
     }
 }
-
 impl Transport {
     pub fn tempo_step(&mut self, d: i32) {
         self.tempo = (self.tempo + d * 1000).clamp(20_000, 500_000);
@@ -131,7 +136,7 @@ impl Transport {
     }
 
     pub fn tempo_display(&self) -> i32 {
-        self.tempo / 1000
+        (self.tempo + 500) / 1000
     }
 
     pub fn bar_display(&self) -> i32 {
@@ -259,6 +264,9 @@ impl Synth303 {
 /// The whole panel's state.
 #[derive(Clone, Debug)]
 pub struct Panel {
+    pub restart_on_stop: bool,
+    pub studio_meters: [orb_engine::studio::meter::Reading; 8],
+    pub sampler_playheads: [Option<orb_engine::studio::sampler::Playhead>; 8],
     pub transport: Transport,
     pub rows: [Row; 4],
     /// The row with the focus 0..=3.
@@ -315,6 +323,9 @@ fn index_of(section: &str, prefix: &str) -> Option<usize> {
 impl Panel {
     pub fn new() -> Self {
         let mut p = Self {
+            restart_on_stop: false,
+            studio_meters: Default::default(),
+            sampler_playheads: [None; 8],
             transport: Transport::default(),
             rows: Default::default(),
             focus: 0,
@@ -345,6 +356,7 @@ impl Panel {
                 "knob" => {
                     let v = match c.name() {
                         "shuffle" | "delay" => 0,
+                        "ch_level" if c.section == "tr909" => behavior::knob_from_engine(100),
                         _ => 500,
                     };
                     p.knobs.insert(c.id, v);
@@ -373,6 +385,10 @@ impl Panel {
         }
         p.numbers.insert("delay.steps".into(), 3);
         p.numbers.insert("pcf.pattern".into(), 0);
+        for (id, value) in crate::studio::midi::defaults() {
+            p.knobs
+                .insert(id, behavior::knob_from_engine(i32::from(value)));
+        }
         p
     }
 
@@ -507,6 +523,104 @@ impl Panel {
         self.faders.get(id).copied().unwrap_or(0)
     }
 
+    /// Changes the selected pattern's length, just like its arrows.
+    pub fn set_pattern_length(&mut self, row: usize, length: u8) {
+        if row >= 4 {
+            return;
+        }
+        let p = self.rows[row].pattern as usize;
+        let length = length.clamp(1, 16);
+        if self.rows[row].len[p] != length {
+            self.rows[row].len[p] = length;
+            self.set_event(&format!("pattern{}.steps", row + 1), i32::from(length));
+        }
+    }
+
+    /// A snapshot of the selected pattern in the engine's wire format.
+    pub fn pattern_bytes(&self, row: usize) -> Vec<u8> {
+        if row >= 4 {
+            return Vec::new();
+        }
+        let pattern = self.rows[row].pattern as usize;
+        let mut bytes = vec![
+            u8::from(self.rows[row].shuffle[pattern]),
+            self.rows[row].len[pattern],
+        ];
+        for step in 0..16 {
+            if row < 2 {
+                let s = self.synth[row].patterns[pattern][step];
+                bytes.extend_from_slice(&[
+                    s.note,
+                    u8::from(s.slide),
+                    u8::from(s.accent),
+                    u8::from(s.up),
+                    u8::from(s.down),
+                    u8::from(s.rest),
+                ]);
+            } else {
+                for instrument in 0..12 {
+                    bytes.push(if row == 2 {
+                        u8::from(self.steps808[instrument][step])
+                    } else {
+                        self.steps909[instrument][step]
+                    });
+                }
+            }
+        }
+        bytes
+    }
+
+    /// Replaces exactly one pattern and sends it atomically through the normal player route.
+    pub fn replace_pattern(&mut self, row: usize, pattern: u8, bytes: Vec<u8>) -> bool {
+        let size = if row < 2 { 98 } else { 194 };
+        if row >= 4 || pattern >= 32 || bytes.len() != size || !(1..=16).contains(&bytes[1]) {
+            return false;
+        }
+        let p = pattern as usize;
+        self.rows[row].len[p] = bytes[1];
+        self.rows[row].shuffle[p] = bytes[0] != 0;
+        for step in 0..16 {
+            if row < 2 {
+                let b = &bytes[2 + step * 6..8 + step * 6];
+                self.synth[row].patterns[p][step] = Step303 {
+                    note: b[0],
+                    slide: b[1] != 0,
+                    accent: b[2] != 0,
+                    up: b[3] != 0,
+                    down: b[4] != 0,
+                    rest: b[5] != 0,
+                };
+            } else if self.rows[row].pattern == pattern {
+                for instrument in 0..12 {
+                    let v = bytes[2 + step * 12 + instrument];
+                    if row == 2 {
+                        self.steps808[instrument][step] = v != 0;
+                    } else {
+                        self.steps909[instrument][step] = v;
+                    }
+                }
+            }
+        }
+        self.emit(Event::PatternData {
+            row,
+            pattern,
+            bytes,
+        });
+        true
+    }
+
+    /// Changes an effect's numeric selector through MIDI using the panel's ordinary event.
+    pub fn set_midi_number(&mut self, id: &str, value: u8) {
+        let v = match id {
+            "delay.steps" => 1 + i32::from(value) * 31 / 127,
+            "pcf.pattern" => i32::from(value) * 54 / 127,
+            _ => return,
+        };
+        if self.numbers.insert(id.into(), v) != Some(v) {
+            self.set_event(id, v);
+        }
+    }
+
     pub fn set_fader(&mut self, id: &str, p: i32) {
         let p = p.clamp(0, behavior::FADER_MAX);
         let old = self.faders.insert(id.into(), p).unwrap_or(-1);
@@ -526,6 +640,13 @@ impl Panel {
     /// [`behavior::switch_position`]. [`Panel::switch`] keeps the value the song holds.
     pub fn switch_position(&self, id: &str) -> u8 {
         behavior::switch_position(id, self.switch(id))
+    }
+
+    pub fn set_delay_steps(&mut self, value: i32) {
+        let value = value.clamp(1, 32);
+        if self.numbers.insert("delay.steps".into(), value) != Some(value) {
+            self.set_event("delay.steps", value);
+        }
     }
 
     pub fn set_switch(&mut self, id: &str, v: u8) {
@@ -631,6 +752,10 @@ impl Panel {
     /// The mouse-down action of a toggle, trigger, grid, radio or mode control.
     /// `now` is the time in seconds (for the 303 note flash).
     pub fn press(&mut self, id: &str, now: f64) {
+        if crate::studio::midi::is_action(id) {
+            self.emit(Event::Press { id: id.to_string() });
+            return;
+        }
         let Some((sec, name)) = id.split_once('.') else {
             return;
         };
@@ -697,6 +822,19 @@ impl Panel {
                 });
             }
             "stop" => {
+                if self.restart_on_stop {
+                    let recording = t.recording;
+                    t.recording = false;
+                    t.playing = false;
+                    t.position = 0;
+                    if recording {
+                        self.set_event("transport.record", 0);
+                    }
+                    self.emit(Event::Press {
+                        id: "transport.stop".into(),
+                    });
+                    return;
+                }
                 // Playing: stop `{1, 0}`; stopped: locate `{8, t}` (`sub_429FE6`).
                 let was_playing = t.playing;
                 let was_recording = t.recording;
@@ -914,7 +1052,7 @@ impl Panel {
         }
     }
 
-    /// Sets a TR-909 step of the selected instrument; a hi-hat step clears the other hi-hat.
+    /// Sets a TR-909 step of the selected instrument. CH and OH are independent lanes.
     pub fn set_step909(&mut self, step: usize, value: u8) {
         self.put_step909(self.inst909, step, value);
     }
@@ -929,17 +1067,6 @@ impl Panel {
             step,
             value,
         });
-        if value != 0 && (i == 8 || i == 9) {
-            let other = 17 - i;
-            if self.steps909[other][step] != 0 {
-                self.steps909[other][step] = 0;
-                self.emit(Event::Step909 {
-                    instrument: other,
-                    step,
-                    value: 0,
-                });
-            }
-        }
     }
 
     /// The new value a mouse down on a 909 step gives, from the current step and modifiers.
@@ -1143,6 +1270,30 @@ impl Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn studio_stop_always_rewinds_and_fractional_tempo_rounds_to_nearest_bpm() {
+        let mut panel = Panel::new();
+        panel.restart_on_stop = true;
+        for playing in [true, false] {
+            panel.transport.playing = playing;
+            panel.transport.position = 5000;
+            panel.transport.recording = true;
+            panel.press("transport.stop", 0.0);
+            assert_eq!(panel.transport.position, 0);
+            assert!(!panel.transport.playing && !panel.transport.recording);
+            assert!(
+                panel
+                    .events
+                    .iter()
+                    .any(|e| matches!(e, Event::Press { id } if id == "transport.stop"))
+            );
+        }
+        for tempo in [139_999, 140_000, 140_180] {
+            panel.transport.tempo = tempo;
+            assert_eq!(panel.transport.tempo_display(), 140);
+        }
+    }
     use crate::behavior::Mods;
 
     #[test]
@@ -1341,14 +1492,21 @@ mod tests {
     }
 
     #[test]
-    fn tr909_hihats_exclude_each_other() {
+    fn tr909_hihats_are_independent() {
         let mut p = Panel::new();
         p.inst909 = 8;
         p.set_step909(3, 1);
         p.inst909 = 9;
         p.set_step909(3, 2);
-        assert_eq!(p.steps909[8][3], 0);
+        assert_eq!(p.steps909[8][3], 1);
         assert_eq!(p.steps909[9][3], 2);
+        p.set_step909(3, 0);
+        assert_eq!((p.steps909[8][3], p.steps909[9][3]), (1, 0));
+        for instrument in [10, 11] {
+            p.inst808 = instrument;
+            p.set_step808(3, true);
+        }
+        assert!(p.steps808[10][3] && p.steps808[11][3]);
         p.inst909 = 1;
         assert_eq!(p.step909_new_value(3, Mods::default()), 1);
     }

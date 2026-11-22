@@ -170,6 +170,15 @@ fn st(x: f64) -> f32 {
 /// A TR-909.
 #[derive(Debug, Clone)]
 pub struct Tr909 {
+    drum_bank: Option<Arc<crate::studio::drums::Bank>>,
+    /// Pattern-mode origin after a manual extended-pattern change; seeks restore absolute phase.
+    extended_origin: i32,
+    independent_hats: bool,
+    closed_hat_level: Option<u8>,
+    /// Optional sidechain event bookkeeping; independent of the original DSP state.
+    kicks: u64,
+    /// Logical instrument hits, indexed by the native pattern column (0 is accent).
+    triggers: [u64; 12],
     /// `+4` (CDevice): the tick of the bar the pattern started at (song mode).
     pub pat_start: i32,
     /// `+0x30`: the pattern-mode parameter copy (the DLL's order).
@@ -231,6 +240,12 @@ impl Tr909 {
             p[1] = 16;
         }
         Tr909 {
+            drum_bank: None,
+            extended_origin: 0,
+            independent_hats: false,
+            closed_hat_level: None,
+            kicks: 0,
+            triggers: [0; 12],
             pat_start: 0,
             params: DEFAULT_PARAMS,
             patterns,
@@ -260,6 +275,13 @@ impl Tr909 {
         &self.patterns[at..at + PATTERN_LEN]
     }
 
+    fn pattern_length(&self, pattern: u8) -> u8 {
+        let native = self.pattern(pattern)[1];
+        self.drum_bank
+            .as_ref()
+            .map_or(native, |bank| bank.length(pattern, native))
+    }
+
     /// The sample in slot `n`.
     fn sample(&self, n: usize) -> Option<Arc<Sample>> {
         Some(self.samples.shared(1000 + n as u16))
@@ -278,6 +300,12 @@ impl Tr909 {
     /// the gain in [`Tr909::gain`].
     fn trigger(&mut self, i: usize) {
         let lv = self.live;
+        if (1..12).contains(&i) {
+            self.triggers[i] = self.triggers[i].wrapping_add(1);
+        }
+        if i == BD && lv[BD_LEVEL] != 0 {
+            self.kicks = self.kicks.wrapping_add(1);
+        }
         match i {
             BD => self.bass(lv[BD_LEVEL], lv[BD_DECAY], lv[BD_TUNE], lv[BD_ATTACK]),
             SD => self.snare(lv[SD_LEVEL], lv[SD_TONE], lv[SD_TUNE], lv[SD_SNAPPY]),
@@ -306,7 +334,12 @@ impl Tr909 {
             RC => self.pitched(i, slot::RC, lv[RC_LEVEL], lv[RC_TUNE], FIXED_DECAY),
             RS => self.simple(i, slot::RS, lv[RS_LEVEL], FIXED_DECAY),
             CP => self.simple(i, slot::CP, lv[CP_LEVEL], FIXED_DECAY),
-            CH => self.simple(i, slot::CH, lv[HH_LEVEL], lv[CH_DECAY]),
+            CH => self.simple(
+                i,
+                slot::CH,
+                self.closed_hat_level.unwrap_or(lv[HH_LEVEL]),
+                lv[CH_DECAY],
+            ),
             OH => self.simple(i, slot::OH, lv[HH_LEVEL], lv[OH_DECAY]),
             _ => {}
         }
@@ -328,7 +361,9 @@ impl Tr909 {
                 let x4 = x2 * x2;
                 let x8 = x4 * x4;
                 // 0x1002D958: sub_1001E3D0(0.996) on the OH voice
-                self.simple[SIMPLE_OH].set_m(CHOKE);
+                if !self.independent_hats {
+                    self.simple[SIMPLE_OH].set_m(CHOKE);
+                }
                 (SIMPLE_CH, C_CH, st(x8))
             }
             _ => (SIMPLE_OH, C_RS_OH, dt),
@@ -420,13 +455,32 @@ impl SongDevice for Tr909 {
 
     /// Slot 1, 0x1002AAC0.
     fn step(&mut self, tick: i32, shuffled: i32, tempo: i32) {
+        let pending = self.live[PATTERN];
+        // The sequencer can advance past the exact bar tick between engine blocks.
+        // Latch during its first sixteenth, before deriving the new pattern's step.
+        if tick.rem_euclid(768) < 48
+            && pending != self.cur_pattern
+            && (self.pattern_length(self.cur_pattern) > 16 || self.pattern_length(pending) > 16)
+        {
+            self.cur_pattern = pending;
+            self.pat_start = 768 * (tick / 768);
+            self.extended_origin = self.pat_start;
+            self.wrapped = true;
+            self.flam_pending = false;
+        }
         let pat = self.cur_pattern;
         let (shuffle, len) = {
             let p = self.pattern(pat);
-            (p[0], p[1])
+            (p[0], self.pattern_length(pat))
         };
         let t = if shuffle != 0 { shuffled } else { tick };
-        let base = if self.song_mode { self.pat_start } else { 0 };
+        let base = if self.song_mode {
+            self.pat_start
+        } else if len > 16 {
+            self.extended_origin
+        } else {
+            0
+        };
         let period = 48 * len as u32;
         if period == 0 {
             // `div` by zero in the original; no file has a pattern of length 0
@@ -476,8 +530,14 @@ impl SongDevice for Tr909 {
         }
         let at = 2 + 12 * step as usize;
         let row: [u8; 12] = {
-            let p = self.pattern(pat);
-            std::array::from_fn(|i| p.get(at + i).copied().unwrap_or(0))
+            if step >= 16 {
+                self.drum_bank
+                    .as_ref()
+                    .map_or([0; 12], |bank| bank.row(pat, step as usize))
+            } else {
+                let p = self.pattern(pat);
+                std::array::from_fn(|i| p.get(at + i).copied().unwrap_or(0))
+            }
         };
         // 0x1002ACAF: f32(AC * accent level * 0.03125f + 1.0)
         self.accent = st((row[AC] as f64 * self.live[ACCENT] as f64) * ACC_STEP as f64 + ACC_BASE);
@@ -504,6 +564,7 @@ impl SongDevice for Tr909 {
     /// Slot 2, 0x1002B670: the argument is not read; the bar of the song's position, the
     /// pending pattern and the enable flag.
     fn relocate(&mut self, _tick: i32, now: i32) {
+        self.extended_origin = 0;
         self.pat_start = Self::bar_of(now);
         if self.live[PATTERN] != self.cur_pattern {
             self.cur_pattern = self.live[PATTERN];
@@ -600,6 +661,30 @@ impl SongDevice for Tr909 {
 }
 
 impl ChannelDevice for Tr909 {
+    fn set_drum_bank(&mut self, bank: Option<Arc<crate::studio::drums::Bank>>) {
+        self.drum_bank = bank;
+    }
+    fn drum_trigger_count(&self, voice: usize) -> u64 {
+        self.triggers.get(voice).copied().unwrap_or(0)
+    }
+    fn set_independent_hats(&mut self, independent: bool) {
+        self.independent_hats = independent;
+        if independent && self.closed_hat_level.is_none() {
+            self.closed_hat_level = Some(self.live[HH_LEVEL]);
+        }
+    }
+    fn set_closed_hat_level(&mut self, level: Option<u8>) {
+        self.closed_hat_level = level.map(|v| v.min(127)).or_else(|| {
+            self.independent_hats
+                .then(|| self.closed_hat_level.unwrap_or(self.live[HH_LEVEL]))
+        });
+    }
+    fn closed_hat_level(&self) -> u8 {
+        self.closed_hat_level.unwrap_or(self.live[HH_LEVEL])
+    }
+    fn kick_count(&self) -> u64 {
+        self.kicks
+    }
     fn playing_pattern(&self) -> Option<u8> {
         Some(self.cur_pattern)
     }

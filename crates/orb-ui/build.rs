@@ -1,5 +1,5 @@
-//! Embeds every SVG part of `assets/ui` (except the composed demo `panel.svg`) in the
-//! binary: writes `$OUT_DIR/parts_gen.rs` with `PARTS: &[(name, uri, bytes)]`, sorted by name.
+//! Generates and embeds the default Graphite SVG parts in the binary. Writes
+//! `$OUT_DIR/parts_gen.rs` with `PARTS: &[(name, uri, bytes)]`, sorted by name.
 
 use std::env;
 use std::fmt::Write as _;
@@ -109,7 +109,7 @@ fn embed_windows_resources(manifest: &Path, version: &str) {
     }
     // Not canonicalized: on Windows that gives a `\\?\D:\...` path, which rc.exe may not open.
     // The `..` parts and (below) forward slashes are fine for rc.exe and llvm-rc.
-    let ico = manifest.join("../../assets/app_icon.ico");
+    let ico = manifest.join("../../assets/brand/acid-recall.ico");
     assert!(
         ico.is_file(),
         "{} is missing (cargo run -p orb-ui-art --bin ui-art -- ico)",
@@ -132,13 +132,13 @@ fn embed_windows_resources(manifest: &Path, version: &str) {
          BEGIN\n\
          BLOCK \"040904B0\"\n\
          BEGIN\n\
-         VALUE \"CompanyName\", \"OpenRB-338\\0\"\n\
-         VALUE \"FileDescription\", \"OpenRB-338\\0\"\n\
+         VALUE \"CompanyName\", \"ACID RECALL\\0\"\n\
+         VALUE \"FileDescription\", \"ACID RECALL\\0\"\n\
          VALUE \"FileVersion\", \"{version}\\0\"\n\
-         VALUE \"InternalName\", \"OpenRB-338\\0\"\n\
+         VALUE \"InternalName\", \"ACID-RECALL\\0\"\n\
          VALUE \"LegalCopyright\", \"GPL-3.0-only\\0\"\n\
-         VALUE \"OriginalFilename\", \"OpenRB-338.exe\\0\"\n\
-         VALUE \"ProductName\", \"OpenRB-338\\0\"\n\
+         VALUE \"OriginalFilename\", \"ACID-RECALL.exe\\0\"\n\
+         VALUE \"ProductName\", \"ACID RECALL\\0\"\n\
          VALUE \"ProductVersion\", \"{version}\\0\"\n\
          END\n\
          END\n\
@@ -160,20 +160,18 @@ fn main() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let version = set_version(&manifest);
     embed_windows_resources(&manifest, &version);
-    let dir = manifest.join("../../assets/ui").canonicalize().unwrap();
-    println!("cargo:rerun-if-changed={}", dir.display());
-    let mut names: Vec<String> = fs::read_dir(&dir)
-        .unwrap()
-        .filter_map(|e| {
-            let name = e.unwrap().file_name().into_string().unwrap();
-            let stem = name.strip_suffix(".svg")?;
-            (stem != "panel").then(|| stem.to_string())
-        })
-        .collect();
-    names.sort();
+    // Embed the default skin from its source, independently of a song's drum-sample mod.
+    // OUT_DIR keeps the committed legacy art set reproducible and the source tree clean.
+    let dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("graphite");
+    fs::create_dir_all(&dir).unwrap();
+    println!("cargo:rerun-if-changed=../orb-ui-art/src");
+    let mut parts = orb_ui_art::graphite::all();
+    parts.sort_by(|a, b| a.name.cmp(&b.name));
     let mut out = String::from("pub static PARTS: &[(&str, &str, &[u8])] = &[\n");
-    for n in &names {
+    for part in parts {
+        let n = &part.name;
         let path = dir.join(format!("{n}.svg"));
+        fs::write(&path, part.to_svg()).unwrap();
         writeln!(
             out,
             "    ({n:?}, \"bytes://orb-ui/{n}.svg\", include_bytes!({:?})),",
