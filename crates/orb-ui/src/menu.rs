@@ -427,10 +427,7 @@ impl App {
     }
 
     fn open_now_inner(&mut self, path: &Path) {
-        if path
-            .extension()
-            .is_some_and(|x| x.eq_ignore_ascii_case("orb338"))
-        {
+        if crate::studio::project::is_project_path(path) {
             self.studio_open(path, &self.studio.context.clone());
             return;
         }
@@ -687,7 +684,7 @@ impl App {
                 .doc
                 .path
                 .as_ref()
-                .is_none_or(|p| p.extension().is_none_or(|e| e != "orb338"))
+                .is_none_or(|p| !crate::studio::project::is_project_path(p))
         {
             self.open_browser(Mode::SaveSong);
             return;
@@ -705,11 +702,7 @@ impl App {
     }
 
     fn save_to_inner(&mut self, path: &Path) {
-        if self.studio.content
-            || path
-                .extension()
-                .is_some_and(|x| x.eq_ignore_ascii_case("orb338"))
-        {
+        if self.studio.content || crate::studio::project::is_project_path(path) {
             self.studio_save(path, &self.studio.context.clone());
             return;
         }

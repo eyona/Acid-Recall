@@ -239,7 +239,7 @@ impl Browser {
     /// its extension.
     pub fn with_studio(mut self) -> Self {
         self.studio = true;
-        self.name = "song.orb338".into();
+        self.name = "song.recall".into();
         self.reload();
         self
     }
@@ -307,8 +307,8 @@ impl Browser {
     /// The extensions the mode lists (lowercase).
     fn extensions(&self) -> Vec<&'static str> {
         match self.mode {
-            Mode::OpenSong => vec!["rbs", "orb338"],
-            Mode::SaveSong if self.studio => vec!["orb338"],
+            Mode::OpenSong => vec!["rbs", "recall", "orb338"],
+            Mode::SaveSong if self.studio => vec!["recall", "orb338"],
             Mode::SaveSong => vec!["rbs"],
             Mode::Export => vec![self.format.extension()],
             Mode::ChooseMod => vec!["rbm"],
@@ -500,10 +500,13 @@ impl Browser {
         let name = match self.mode {
             Mode::SaveSong => {
                 if self.studio {
-                    return Ok(self.dir.join(Path::new(name).with_extension("orb338")));
+                    return Ok(self
+                        .dir
+                        .join(crate::studio::project::save_path(Path::new(name))));
                 }
                 if ext.is_some_and(|e| {
-                    e.eq_ignore_ascii_case("rbs") || e.eq_ignore_ascii_case("orb338")
+                    e.eq_ignore_ascii_case("rbs")
+                        || crate::studio::project::is_project_path(Path::new(name))
                 }) {
                     name.to_string()
                 } else {

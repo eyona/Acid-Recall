@@ -149,58 +149,79 @@ fn unloading_can_be_undone_and_redone_with_the_original_pcm_and_warp_settings() 
 
 #[test]
 fn save_and_open_restore_embedded_sample_last_step_and_mix_settings() {
+    for extension in ["recall", "orb338"] {
+        let (mut app, mut audio, ctx) = setup();
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join(format!("session.{extension}"));
+        app.studio.settings.lanes[7].bars = 64;
+        app.studio.settings.lanes[7].steps[1023] = 117;
+        app.studio.settings.return_gain = 0.73;
+        app.studio.settings.sampler_bus.gain = 0.42;
+        app.studio.settings.sampler_bus.dist = true;
+        app.studio.settings.sampler_bus.delay = 0.31;
+        app.studio.settings.sampler_bus.reverb_send = 0.24;
+        app.studio.settings.lanes[7].reverse = true;
+        app.studio.settings.lanes[7].warp = true;
+        app.studio.settings.lanes[7].warp_bpm = 137.5;
+        app.studio.settings.lanes[7].warp_beats = 8;
+        app.studio.settings.lanes[7].warp_grid = true;
+        app.studio.settings.lanes[7]
+            .warp_markers
+            .insert(0.4, 0.6, 0.0, 1.0)
+            .unwrap();
+        app.studio.waves[7] = Some(Arc::new(Wave {
+            frames: vec![[0.2, -0.1]; 1000],
+        }));
+        app.settings.sidechain.depth = [21, 48];
+        app.settings.closed_hat_level = Some(42);
+        app.doc.modified = true;
+        app.save_to(&path);
+        finish(&mut app, &mut audio, &ctx);
+        assert!(app.studio.notice.is_none(), "{:?}", app.studio.notice);
+        assert!(path.is_file());
+        assert!(std::fs::read(&path).unwrap().starts_with(b"ORB338S2"));
+        assert!(!app.doc.modified);
+        app.studio.settings.lanes[7].steps[1023] = 0;
+        app.open_now(&path);
+        assert!(app.studio.opening);
+        finish(&mut app, &mut audio, &ctx);
+        assert_eq!(app.studio.settings.lanes[7].steps[1023], 117);
+        assert!(app.studio.settings.lanes[7].reverse);
+        assert!(app.studio.settings.lanes[7].warp);
+        assert_eq!(app.studio.settings.lanes[7].warp_bpm, 137.5);
+        assert_eq!(app.studio.settings.lanes[7].warp_beats, 8);
+        assert!(app.studio.settings.lanes[7].warp_grid);
+        let marker = app.studio.settings.lanes[7].warp_markers.points()[0];
+        assert_eq!((marker.source, marker.target), (0.4, 0.6));
+        assert_eq!(app.studio.settings.sampler_bus.gain, 0.42);
+        assert!(app.studio.settings.sampler_bus.dist);
+        assert_eq!(app.studio.settings.sampler_bus.delay, 0.31);
+        assert_eq!(app.studio.settings.sampler_bus.reverb_send, 0.24);
+        assert_eq!(app.panel.value("studio.return"), Some(93));
+        assert_eq!(app.studio.waves[7].as_ref().unwrap().frames.len(), 1000);
+        assert_eq!(app.settings.sidechain.depth, [21, 48]);
+        assert_eq!(app.settings.closed_hat_level, Some(42));
+        assert_eq!(app.doc.path.as_ref(), Some(&path));
+        assert!(!app.doc.modified);
+        // Normal Save keeps the opened legacy path rather than silently renaming the file.
+        app.studio.settings.return_gain = 0.61;
+        app.doc.modified = true;
+        app.save();
+        assert!(!app.browsing());
+        finish(&mut app, &mut audio, &ctx);
+        assert_eq!(app.doc.path.as_ref(), Some(&path));
+        assert!(path.is_file());
+    }
+}
+
+#[test]
+fn new_studio_save_defaults_to_recall() {
     let (mut app, mut audio, ctx) = setup();
     let folder = tempfile::tempdir().unwrap();
-    let path = folder.path().join("session.orb338");
-    app.studio.settings.lanes[7].bars = 64;
-    app.studio.settings.lanes[7].steps[1023] = 117;
-    app.studio.settings.return_gain = 0.73;
-    app.studio.settings.sampler_bus.gain = 0.42;
-    app.studio.settings.sampler_bus.dist = true;
-    app.studio.settings.sampler_bus.delay = 0.31;
-    app.studio.settings.sampler_bus.reverb_send = 0.24;
-    app.studio.settings.lanes[7].reverse = true;
-    app.studio.settings.lanes[7].warp = true;
-    app.studio.settings.lanes[7].warp_bpm = 137.5;
-    app.studio.settings.lanes[7].warp_beats = 8;
-    app.studio.settings.lanes[7].warp_grid = true;
-    app.studio.settings.lanes[7]
-        .warp_markers
-        .insert(0.4, 0.6, 0.0, 1.0)
-        .unwrap();
-    app.studio.waves[7] = Some(Arc::new(Wave {
-        frames: vec![[0.2, -0.1]; 1000],
-    }));
-    app.settings.sidechain.depth = [21, 48];
-    app.settings.closed_hat_level = Some(42);
-    app.doc.modified = true;
-    app.studio_save(&path, &ctx);
+    app.studio_save(&folder.path().join("new-session"), &ctx);
     finish(&mut app, &mut audio, &ctx);
-    assert!(app.studio.notice.is_none(), "{:?}", app.studio.notice);
-    assert!(path.is_file());
-    assert!(!app.doc.modified);
-    app.studio.settings.lanes[7].steps[1023] = 0;
-    app.studio_open(&path, &ctx);
-    assert!(app.studio.opening);
-    finish(&mut app, &mut audio, &ctx);
-    assert_eq!(app.studio.settings.lanes[7].steps[1023], 117);
-    assert!(app.studio.settings.lanes[7].reverse);
-    assert!(app.studio.settings.lanes[7].warp);
-    assert_eq!(app.studio.settings.lanes[7].warp_bpm, 137.5);
-    assert_eq!(app.studio.settings.lanes[7].warp_beats, 8);
-    assert!(app.studio.settings.lanes[7].warp_grid);
-    let marker = app.studio.settings.lanes[7].warp_markers.points()[0];
-    assert_eq!((marker.source, marker.target), (0.4, 0.6));
-    assert_eq!(app.studio.settings.sampler_bus.gain, 0.42);
-    assert!(app.studio.settings.sampler_bus.dist);
-    assert_eq!(app.studio.settings.sampler_bus.delay, 0.31);
-    assert_eq!(app.studio.settings.sampler_bus.reverb_send, 0.24);
-    assert_eq!(app.panel.value("studio.return"), Some(93));
-    assert_eq!(app.studio.waves[7].as_ref().unwrap().frames.len(), 1000);
-    assert_eq!(app.settings.sidechain.depth, [21, 48]);
-    assert_eq!(app.settings.closed_hat_level, Some(42));
-    assert_eq!(app.doc.path.as_ref(), Some(&path));
-    assert!(!app.doc.modified);
+    assert_eq!(app.doc.path, Some(folder.path().join("new-session.recall")));
+    assert!(!folder.path().join("new-session.orb338").exists());
 }
 
 #[test]

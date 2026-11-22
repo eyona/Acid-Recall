@@ -880,15 +880,21 @@ impl App {
                 let mut pitch = note.note.min(12);
                 ui.horizontal(|ui| {
                     ui.label("Note");
-                    egui::ComboBox::from_id_salt(("tb-step-note", row, step))
-                        .selected_text(NOTES[usize::from(pitch)])
-                        .width(80.0)
-                        .show_ui(ui, |ui| {
-                            for (value, label) in NOTES.iter().enumerate() {
-                                ui.selectable_value(&mut pitch, value as u8, *label);
-                            }
-                        });
+                    ui.label(NOTES[usize::from(pitch)]);
                 });
+                // Memory-backed popups in egui share one slot per viewport. A nested
+                // ComboBox replaces this context menu, so keep all note choices inside it.
+                egui::Grid::new(("tb-step-note", row, step))
+                    .num_columns(7)
+                    .spacing(Vec2::new(3.0, 3.0))
+                    .show(ui, |ui| {
+                        for (value, label) in NOTES.iter().enumerate() {
+                            ui.selectable_value(&mut pitch, value as u8, *label);
+                            if value % 7 == 6 {
+                                ui.end_row();
+                            }
+                        }
+                    });
                 if pitch != note.note.min(12) {
                     self.panel.synth[row].edit = step as u8;
                     self.panel
@@ -1480,6 +1486,103 @@ mod tests {
                 assert!(canvas.contains_rect(area));
             }
             output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn tb_note_context_menu_can_open_choices_and_select_a_named_note() {
+        fn collect(shape: &egui::Shape, labels: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Text(t) => labels.push((
+                    t.galley.text().into(),
+                    t.galley.rect.translate(t.pos.to_vec2()),
+                )),
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect(shape, labels);
+                    }
+                }
+                _ => {}
+            }
+        }
+        fn frame(
+            ctx: &egui::Context,
+            app: &mut App,
+            events: Vec<egui::Event>,
+        ) -> Vec<(String, Rect)> {
+            let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT));
+            let row = app.panel.focus;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.rack_tb(ui, Rack::fit(screen), row, ROWS[row].0),
+            );
+            let mut labels = Vec::new();
+            for shape in &output.shapes {
+                collect(&shape.shape, &mut labels);
+            }
+            output.textures_delta.clear();
+            labels
+        }
+        fn click(
+            ctx: &egui::Context,
+            app: &mut App,
+            pos: Pos2,
+            button: egui::PointerButton,
+        ) -> Vec<(String, Rect)> {
+            frame(ctx, app, vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                frame(
+                    ctx,
+                    app,
+                    vec![egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed,
+                        modifiers: Default::default(),
+                    }],
+                );
+            }
+            frame(ctx, app, vec![])
+        }
+        for (row, initial, target, expected) in [(0, 0, "D", 2), (1, 5, "A#", 10)] {
+            let ctx = egui::Context::default();
+            let mut app = App::new(Panel::new(), None);
+            app.panel.focus = row;
+            let note = &mut app.panel.synth[row].patterns[0][2];
+            note.note = initial;
+            note.rest = false;
+            note.accent = true;
+            note.slide = true;
+            note.up = true;
+            let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT));
+            let step = Rack::fit(screen)
+                .rect(300.0, ROWS[row].0 + 126.0, 34.0, 27.0)
+                .center();
+            frame(&ctx, &mut app, vec![]);
+            let labels = click(&ctx, &mut app, step, egui::PointerButton::Secondary);
+            let choice = labels
+                .iter()
+                .find(|(s, _)| s == target)
+                .unwrap_or_else(|| panic!("Named note choices did not open: {labels:?}"))
+                .1
+                .center();
+            click(&ctx, &mut app, choice, egui::PointerButton::Primary);
+            click(
+                &ctx,
+                &mut app,
+                Pos2::new(1000.0, 1000.0),
+                egui::PointerButton::Primary,
+            );
+            let note = app.panel.synth[row].patterns[0][2];
+            assert_eq!(note.note, expected, "TB {}", row + 1);
+            assert_eq!(app.panel.synth[row].edit, 2);
+            assert!(!note.rest);
+            assert!(note.accent && note.slide && note.up);
+            assert!(!note.down);
         }
     }
 

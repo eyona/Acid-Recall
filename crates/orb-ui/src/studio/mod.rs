@@ -394,8 +394,7 @@ impl App {
             self.fail("Studio is still preparing; try again.");
             return;
         };
-        let mut path = path.to_path_buf();
-        path.set_extension("orb338");
+        let path = project::save_path(path);
         let revision = self.studio.revision;
         let sidechain = project.metadata.sidechain.clone();
         let closed_hat = project.metadata.closed_hat;

@@ -19,13 +19,15 @@ Reducing the length hides later pages without deleting their notes. Increasing i
 restores them. Groove Generator and RND generate the entire selected 16/32/64-step phrase;
 **Undo Random** restores the previous phrase while there have been no intervening edits.
 
-Save extended patterns in **Studio .orb338** projects. The legacy .rbs format contains
-only the first sixteen steps.
+Save extended patterns in **Studio .recall** projects. New Save As operations use `.recall`
+by default. Existing `.orb338` projects still open, and Save keeps an opened legacy file's
+name and extension. The binary container format is unchanged. The legacy .rbs format
+contains only the first sixteen steps.
 
 ## TB-303
 
 The note-key layout is unchanged. **A** marks Accent, **S** marks Slide. Right-click a key
-to choose a note by name (**C, C#, D… B, C+**), with Rest, Accent, Slide and octave flags.
+to choose a note from the grid (**C, C#, D… B, C+**), with Rest, Accent, Slide and octave flags.
 C+ preserves the original upper-C pitch value.
 
 ## Sampler Focus

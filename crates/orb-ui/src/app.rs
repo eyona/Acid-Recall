@@ -280,7 +280,7 @@ impl App {
     /// for a song.
     pub fn open_browser(&mut self, mode: Mode) {
         let mut browser = Browser::new(mode, &self.settings);
-        if mode == Mode::SaveSong && self.studio.content {
+        if mode == Mode::SaveSong && (self.studio.content || self.studio.modern) {
             browser = browser.with_studio();
         }
         self.browser = Some(browser);
