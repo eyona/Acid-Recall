@@ -2,7 +2,7 @@ name: MIDI Windows preview
 
 on:
   push:
-    branches: [feat/uc33-midi-input, feat/studio-v2]
+    branches: [feat/uc33-midi-input, feat/studio-v2, codex/ux-trial-20261122]
   workflow_dispatch:
 
 permissions:
@@ -64,7 +64,7 @@ jobs:
           } else {
             Write-Output 'Desktop screenshot unavailable on this runner; vector preview is included.'
           }
-          foreach ($studioView in @('sampler', 'space')) {
+          foreach ($studioView in @('sampler', 'space', 'trial')) {
             $studioPreviewPath = Join-Path $PWD ('graphite-preview/' + $studioView + '.png')
             $studioProcess = Start-Process -FilePath target/release/OpenRB-338.exe -WindowStyle Hidden -PassThru -ArgumentList @('--demo', '--size', '1600x1000', '--ppp', '0.6', '--studio-view', $studioView, '--screenshot', $studioPreviewPath)
             if (-not $studioProcess.WaitForExit(45000)) { Stop-Process -Id $studioProcess.Id }
@@ -89,11 +89,12 @@ jobs:
           Copy-Item docs/graphite.md midi-preview/README-GRAPHITE.md
           Copy-Item docs/sidechain.md midi-preview/README-SIDECHAIN.md
           Copy-Item docs/studio.md midi-preview/README-STUDIO.md
+          Copy-Item docs/ux-trial.md midi-preview/README-UX-TRIAL.md
           Copy-Item docs/LICENSE-SYMPHONIA.txt midi-preview/LICENSE-SYMPHONIA.txt
           Copy-Item .build-tools/asio/sdk/ASIOSDK/LICENSE.txt midi-preview/LICENSE-ASIO-SDK.txt
           New-Item -ItemType Directory -Force -Path midi-preview/sources
           Copy-Item .build-tools/asio/ASIO-SDK_2.3.4_2025-10-15.zip midi-preview/sources/
-          foreach ($studioView in @('sampler', 'space')) {
+          foreach ($studioView in @('sampler', 'space', 'trial')) {
             $studioPreviewPath = 'graphite-preview/' + $studioView + '.png'
             if (Test-Path -LiteralPath $studioPreviewPath) { Copy-Item -LiteralPath $studioPreviewPath -Destination midi-preview/ }
           }
@@ -104,6 +105,61 @@ jobs:
           path: midi-preview/
           if-no-files-found: error
           retention-days: 30
+
+  publish-ux-trial:
+    name: Publish separate UX trial download
+    needs: windows
+    if: github.ref == 'refs/heads/codex/ux-trial-20261122'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: acid-recall-ux-trial-20261122
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ACID-RECALL-Windows-x64
+          path: ux-trial
+      - name: Publish isolated trial ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TRIAL_TAG=windows-ux-trial-20261122
+          TRIAL_ZIP=ACID-RECALL-UX-TRIAL-Windows-x64.zip
+          (cd ux-trial && zip -r "../${TRIAL_ZIP}" .)
+          cat > trial-notes.md <<EOF
+          # ACID RECALL — UX trial, 22 November 2026
+
+          Separate test build. The normal DOWNLOAD / windows-preview ZIP stays unchanged.
+          Extract this ZIP into its own folder and run ACID-RECALL.exe.
+
+          - Focus sampler layout with AUTO CUT, WARP, GATER and selectable SIDECHAIN source.
+          - TR-808 / TR-909: 16 steps by default; 32/64 reveal pages, FOLLOW and page copying.
+          - Groove Generator follows the full selected pattern length.
+          - TB note names in the step menu and independent Accent / Slide indicators.
+          - Existing knobs, mixer strips and right-hand effect panels retained.
+
+          Save extended patterns as Studio .orb338 projects. Use Save As for test copies.
+          Please check playback, MIDI sync, saving/reopening and controller assignments.
+          This trial is not version 1.0 stable.
+
+          Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}
+          EOF
+          if gh release view "${TRIAL_TAG}" > /dev/null 2>&1; then
+            gh release upload "${TRIAL_TAG}" "${TRIAL_ZIP}" --clobber
+            gh api --method PATCH "repos/${GH_REPO}/git/refs/tags/${TRIAL_TAG}" \
+              -f "sha=${BUILD_SHA}" -F force=true > /dev/null
+            gh release edit "${TRIAL_TAG}" --prerelease --notes-file trial-notes.md
+          else
+            gh release create "${TRIAL_TAG}" "${TRIAL_ZIP}" --target "${BUILD_SHA}" \
+              --title "ACID RECALL — UX trial (22 November 2026)" --prerelease \
+              --notes-file trial-notes.md
+          fi
 
   publish-preview:
     name: Publish public Windows download

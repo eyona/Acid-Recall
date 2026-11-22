@@ -4,6 +4,7 @@ pub mod audio_file;
 mod bus;
 pub use bus::SamplerBusSettings;
 pub mod convolution;
+pub mod drums;
 mod fft;
 pub mod meter;
 mod mp3;
@@ -41,6 +42,9 @@ fn clean(value: f64) -> f64 {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
+    /// Shared immutable banks; replacements retain the old bank until UI garbage collection.
+    #[serde(default)]
+    pub drum_patterns: [std::sync::Arc<drums::Bank>; 2],
     /// Per-machine calibration. Missing fields in older projects preserve the legacy mix.
     #[serde(default)]
     pub drum_gain_db: [f64; 2],
@@ -59,6 +63,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            drum_patterns: std::array::from_fn(|_| std::sync::Arc::default()),
             drum_gain_db: [0.0; 2],
             sampler_bus: SamplerBusSettings::default(),
             lanes: std::array::from_fn(|_| Lane::default()),
@@ -118,6 +123,7 @@ pub struct Studio {
     smooth_return: f64,
     wet_remaining: usize,
     ducker: crate::sidechain::Ducker,
+    lane_duckers: [crate::sidechain::Ducker; LANES],
 }
 
 impl Studio {
@@ -143,6 +149,7 @@ impl Studio {
             smooth_return: 0.0,
             wet_remaining: 0,
             ducker: crate::sidechain::Ducker::default(),
+            lane_duckers: std::array::from_fn(|_| crate::sidechain::Ducker::default()),
         }
     }
 
@@ -197,12 +204,29 @@ impl Studio {
     }
 
     pub fn modulation(&mut self, mut data: Modulation) {
-        // Sampler ducking follows the global kick source and release, with its own depth.
-        // TB depth controls stay independent from the sampler's opt-in lanes.
+        // GLOBAL lanes preserve the shared source and release; explicit lane routes override
+        // only their machine and voice. TB depth controls stay independent from sampler depth.
         data.config.depth = [65; 2];
         self.ducker.set_config(data.config);
         let duck = self.ducker.gains_for_voices(data.drum_counts, data.audible);
         self.sampler.set_modulation(data.gates, duck[0]);
+        for (i, ducker) in self.lane_duckers.iter_mut().enumerate() {
+            let lane = &self.settings.lanes[i];
+            let mut config = data.config;
+            config.enabled = lane.sidechain && lane.sidechain_source != 0;
+            config.source = match lane.sidechain_source {
+                1 => crate::sidechain::Source::Tr808,
+                2 => crate::sidechain::Source::Tr909,
+                _ => crate::sidechain::Source::Both,
+            };
+            config.instrument = lane.sidechain_instrument;
+            ducker.set_config(config);
+            // Track all counters even in GLOBAL mode: choosing a new source must not replay hits.
+            let gains = ducker.gains_for_voices(data.drum_counts, data.audible);
+            if lane.sidechain_source != 0 {
+                self.sampler.set_lane_duck(i, gains[0]);
+            }
+        }
         self.sampler
             .set_drum_modulation(data.drum_triggers, data.ticks_per_frame);
     }

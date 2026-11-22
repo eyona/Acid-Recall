@@ -61,6 +61,10 @@ pub struct Lane {
     pub gater_attack_ms: f64,
     pub gater_release_ms: f64,
     pub sidechain: bool,
+    /// 0 keeps the legacy global sidechain; 1 selects TR-808, 2 selects TR-909.
+    pub sidechain_source: u8,
+    /// Native TR voice column, independent of the gater's source and instrument.
+    pub sidechain_instrument: u8,
 }
 
 impl Default for Lane {
@@ -94,6 +98,8 @@ impl Default for Lane {
             gater_attack_ms: 2.0,
             gater_release_ms: 35.0,
             sidechain: false,
+            sidechain_source: 0,
+            sidechain_instrument: 1,
         }
     }
 }
@@ -140,6 +146,8 @@ impl Lane {
         self.send = finite(self.send, 0.0, 0.0, 1.0);
         self.gater_source = self.gater_source.min(4);
         self.gater_instrument = self.gater_instrument.clamp(1, 11);
+        self.sidechain_source = self.sidechain_source.min(2);
+        self.sidechain_instrument = self.sidechain_instrument.clamp(1, 11);
         self.gater_hold = finite(self.gater_hold, 0.5, 0.125, 16.0);
         self.gater_depth = finite(self.gater_depth, 1.0, 0.0, 1.0);
         self.gater_attack_ms = finite(self.gater_attack_ms, 2.0, 0.1, 100.0);
@@ -178,7 +186,7 @@ pub struct Sampler {
     drum_ticks_per_frame: f64,
     gater_holds: [f64; LANES],
     gater_routes: [(u8, u8); LANES],
-    duck: [f32; 64],
+    duck: [[f32; 64]; LANES],
     modulation: [f64; LANES],
     duck_mix: [f64; LANES],
 }
@@ -216,7 +224,7 @@ impl Default for Sampler {
             drum_ticks_per_frame: 0.0,
             gater_holds: [0.0; LANES],
             gater_routes: [(0, 1); LANES],
-            duck: [1.0; 64],
+            duck: [[1.0; 64]; LANES],
             modulation: [1.0; LANES],
             duck_mix: [0.0; LANES],
         }
@@ -226,7 +234,11 @@ impl Default for Sampler {
 impl Sampler {
     pub fn set_modulation(&mut self, source_gates: [bool; 2], duck: [f32; 64]) {
         self.source_gates = source_gates;
-        self.duck = duck;
+        self.duck = [duck; LANES];
+    }
+
+    pub fn set_lane_duck(&mut self, lane: usize, duck: [f32; 64]) {
+        self.duck[lane] = duck;
     }
 
     /// Each nonzero counter is a new native hit in this block, not an audio-level detector.
@@ -596,7 +608,7 @@ impl Sampler {
                     if lane.sidechain { 1.0 } else { 0.0 },
                     0.01,
                 );
-                let duck = 1.0 - self.duck_mix[i] * (1.0 - f64::from(self.duck[j]));
+                let duck = 1.0 - self.duck_mix[i] * (1.0 - f64::from(self.duck[i][j]));
                 let pan = [(1.0 - lane.pan).min(1.0), (1.0 + lane.pan).min(1.0)];
                 super::smooth(&mut self.sends[i], lane.send, 0.004);
                 for c in 0..2 {

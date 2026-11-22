@@ -713,8 +713,8 @@ impl App {
                 });
                 ui.small(
                     "Gater follows the selected TR instrument, even with its mixer volume down. \
-                     Sidechain follows the global sidechain \
-                     On, TR source, voice and release (65% depth).",
+                     Sidechain has an independent TR source and voice (65% depth, shared release). \
+                     GLOBAL preserves the shared sidechain routing of older projects.",
                 );
                 ui.small(
                     "Pitch changes playback speed. Choke 0 is independent; lanes \

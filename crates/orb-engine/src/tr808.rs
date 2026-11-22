@@ -126,6 +126,9 @@ fn st(x: f64) -> f32 {
 /// A TR-808.
 #[derive(Debug, Clone)]
 pub struct Tr808 {
+    drum_bank: Option<Arc<crate::studio::drums::Bank>>,
+    /// Pattern-mode origin after a manual extended-pattern change; seeks restore absolute phase.
+    extended_origin: i32,
     independent_hats: bool,
     /// Optional sidechain event bookkeeping; independent of the original DSP state.
     kicks: u64,
@@ -185,6 +188,8 @@ impl Tr808 {
             p[1] = 16;
         }
         Tr808 {
+            drum_bank: None,
+            extended_origin: 0,
             independent_hats: false,
             kicks: 0,
             triggers: [0; 12],
@@ -211,6 +216,13 @@ impl Tr808 {
     fn pattern(&self, p: u8) -> &[u8] {
         let at = p as usize * PATTERN_LEN;
         &self.patterns[at..at + PATTERN_LEN]
+    }
+
+    fn pattern_length(&self, pattern: u8) -> u8 {
+        let native = self.pattern(pattern)[1];
+        self.drum_bank
+            .as_ref()
+            .map_or(native, |bank| bank.length(pattern, native))
     }
 
     /// The sample in slot `n`.
@@ -371,13 +383,31 @@ impl SongDevice for Tr808 {
 
     /// Slot 1, 0x10027690.
     fn step(&mut self, tick: i32, shuffled: i32, _tempo: i32) {
+        let pending = self.live[PATTERN];
+        // The sequencer can advance past the exact bar tick between engine blocks.
+        // Latch during its first sixteenth, before deriving the new pattern's step.
+        if tick.rem_euclid(768) < 48
+            && pending != self.cur_pattern
+            && (self.pattern_length(self.cur_pattern) > 16 || self.pattern_length(pending) > 16)
+        {
+            self.cur_pattern = pending;
+            self.pat_start = 768 * (tick / 768);
+            self.extended_origin = self.pat_start;
+            self.wrapped = true;
+        }
         let pat = self.cur_pattern;
         let (shuffle, len) = {
             let p = self.pattern(pat);
-            (p[0], p[1])
+            (p[0], self.pattern_length(pat))
         };
         let t = if shuffle != 0 { shuffled } else { tick };
-        let base = if self.song_mode { self.pat_start } else { 0 };
+        let base = if self.song_mode {
+            self.pat_start
+        } else if len > 16 {
+            self.extended_origin
+        } else {
+            0
+        };
         let period = 48 * len as u32;
         if period == 0 {
             // `div` by zero in the original; no file has a pattern of length 0
@@ -414,8 +444,14 @@ impl SongDevice for Tr808 {
         }
         let at = 2 + 12 * step as usize;
         let row: [u8; 12] = {
-            let p = self.pattern(pat);
-            std::array::from_fn(|i| p.get(at + i).copied().unwrap_or(0))
+            if step >= 16 {
+                self.drum_bank
+                    .as_ref()
+                    .map_or([0; 12], |bank| bank.row(pat, step as usize))
+            } else {
+                let p = self.pattern(pat);
+                std::array::from_fn(|i| p.get(at + i).copied().unwrap_or(0))
+            }
         };
         // 0x10027821: f32(AC * accent level * 0.03125f + 1.0)
         self.accent = st((row[AC] as f64 * self.live[ACCENT] as f64) * ACC_STEP as f64 + ACC_BASE);
@@ -429,6 +465,7 @@ impl SongDevice for Tr808 {
     /// Slot 2, 0x10028030: the argument is not read; the bar of the song's position, the
     /// pending pattern and the enable flag.
     fn relocate(&mut self, _tick: i32, now: i32) {
+        self.extended_origin = 0;
         self.pat_start = Self::bar_of(now);
         if self.live[PATTERN] != self.cur_pattern {
             self.cur_pattern = self.live[PATTERN];
@@ -519,6 +556,9 @@ impl SongDevice for Tr808 {
 }
 
 impl ChannelDevice for Tr808 {
+    fn set_drum_bank(&mut self, bank: Option<Arc<crate::studio::drums::Bank>>) {
+        self.drum_bank = bank;
+    }
     fn drum_trigger_count(&self, voice: usize) -> u64 {
         self.triggers.get(voice).copied().unwrap_or(0)
     }

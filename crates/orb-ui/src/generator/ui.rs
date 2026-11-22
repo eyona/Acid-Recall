@@ -44,6 +44,9 @@ impl App {
     }
 
     fn generator_before(&self, row: usize, pattern: u8) -> Vec<u8> {
+        if row >= 2 {
+            return self.drum_pattern_bytes(row, pattern);
+        }
         if let Some(link) = &self.link {
             let size = if row < 2 { 98 } else { 194 };
             let at = usize::from(pattern) * size;
@@ -68,7 +71,11 @@ impl App {
             return;
         }
         let options = &self.generator.options;
-        let length = self.panel.rows[row].len[self.panel.rows[row].pattern as usize].clamp(1, 16);
+        let length = if row >= 2 {
+            self.drum_length(row) as u8
+        } else {
+            self.panel.rows[row].len[self.panel.rows[row].pattern as usize].clamp(1, 16)
+        };
         let linked = row < 2 && options.link_tb;
         let tb_lengths = std::array::from_fn(|r| {
             self.panel.rows[r].len[usize::from(self.panel.rows[r].pattern)].clamp(1, 16)
@@ -107,7 +114,15 @@ impl App {
                 self.panel.rows[r].shuffle[usize::from(pattern)]
             };
             bytes[0] = u8::from(pattern_shuffle);
-            self.panel.replace_pattern(r, pattern, bytes.clone());
+            if r >= 2 {
+                // Preserve inactive pages when regenerating a shortened pattern.
+                let mut full = before.clone();
+                full[..bytes.len()].copy_from_slice(&bytes);
+                bytes = full;
+                self.drum_replace_pattern(r, pattern, bytes.clone());
+            } else {
+                self.panel.replace_pattern(r, pattern, bytes.clone());
+            }
             changes.push(Change {
                 row: r,
                 pattern,
@@ -153,7 +168,9 @@ impl App {
             }
         }
         undo.changes.iter().all(|c| {
-            if self.panel.rows[c.row].pattern == c.pattern {
+            if c.row >= 2 {
+                self.drum_pattern_bytes(c.row, c.pattern) == c.after
+            } else if self.panel.rows[c.row].pattern == c.pattern {
                 self.panel.pattern_bytes(c.row) == c.after
             } else if let Some(link) = &self.link {
                 let size = c.after.len();
@@ -172,7 +189,11 @@ impl App {
         self.flush_generator_edits();
         let undo = self.generator.undo.take().unwrap();
         for c in undo.changes {
-            self.panel.replace_pattern(c.row, c.pattern, c.before);
+            if c.row >= 2 {
+                self.drum_replace_pattern(c.row, c.pattern, c.before);
+            } else {
+                self.panel.replace_pattern(c.row, c.pattern, c.before);
+            }
         }
         if let Some((before, _)) = undo.tuning {
             self.panel.set_knob("tb303_1.tune", before[0]);
@@ -257,7 +278,7 @@ impl App {
             .vscroll(true)
             .show(ctx, |ui| {
                 ui.heading("Musical Random");
-                ui.label("Generate the selected pattern of each machine. Length: 1 to 16 steps.");
+                ui.label("Generate the selected pattern: TB 1–16 steps; TR 16 / 32 / 64 steps.");
                 let o = &mut self.generator.options;
                 ui.horizontal(|ui| {
                     ui.label("Key");
@@ -297,17 +318,36 @@ impl App {
                 for (row, name) in MACHINES.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(*name);
-                        let pattern = usize::from(self.panel.rows[row].pattern);
-                        let mut length = self.panel.rows[row].len[pattern].clamp(1, 16);
-                        if ui
-                            .add(
-                                egui::DragValue::new(&mut length)
-                                    .range(1..=16)
-                                    .suffix(" steps"),
-                            )
-                            .changed()
-                        {
-                            self.panel.set_pattern_length(row, length);
+                        if row >= 2 {
+                            let before = self.drum_length(row);
+                            let mut length = before;
+                            egui::ComboBox::from_id_salt(("generator-drum-length", row))
+                                .selected_text(format!("{length} steps"))
+                                .show_ui(ui, |ui| {
+                                    for value in [16, 32, 64] {
+                                        ui.selectable_value(
+                                            &mut length,
+                                            value,
+                                            format!("{value} steps"),
+                                        );
+                                    }
+                                });
+                            if length != before {
+                                self.drum_set_length(row, length);
+                            }
+                        } else {
+                            let pattern = usize::from(self.panel.rows[row].pattern);
+                            let mut length = self.panel.rows[row].len[pattern].clamp(1, 16);
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut length)
+                                        .range(1..=16)
+                                        .suffix(" steps"),
+                                )
+                                .changed()
+                            {
+                                self.panel.set_pattern_length(row, length);
+                            }
                         }
                         if ui.button("Random").clicked() {
                             generate = Some(row);

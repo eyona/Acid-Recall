@@ -14,6 +14,7 @@ pub mod behavior;
 pub mod browser;
 pub mod crash;
 pub mod document;
+mod drums;
 pub mod error_box;
 pub mod generator;
 mod graphite_rack;

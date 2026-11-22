@@ -189,6 +189,108 @@ fn sample_knobs(ui: &mut Ui, lane: &mut Lane, prefix: &str) -> [Rect; 3] {
     [p.rect, l.rect, r.rect]
 }
 
+/// Show musical beats at their actual source positions, including local WARP anchors.
+fn sample_beat_grid(ui: &Ui, rect: Rect, lane: &Lane) {
+    if !lane.warp {
+        return;
+    }
+    let beats = usize::from(lane.warp_beats.clamp(1, 256));
+    let labels = (rect.width() * (lane.end - lane.start) as f32 / 42.0).max(1.0) as usize;
+    let stride = beats.div_ceil(labels).max(1);
+    for beat in 0..=beats {
+        let source = lane
+            .warp_markers
+            .map(beat as f64 / beats as f64, lane.start, lane.end)
+            .0;
+        let x = rect.left() + source as f32 * rect.width();
+        ui.painter().line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            Stroke::new(1.0, Color32::from_gray(66)),
+        );
+        if beat < beats && beat % stride == 0 {
+            ui.painter().text(
+                egui::pos2(x + 3.0, rect.bottom() - 2.0),
+                Align2::LEFT_BOTTOM,
+                format!("{}.{}", beat / 4 + 1, beat % 4 + 1),
+                FontId::monospace(9.0),
+                Color32::LIGHT_GRAY,
+            );
+        }
+    }
+    for point in lane.warp_markers.points() {
+        let x = rect.left() + point.source as f32 * rect.width();
+        ui.painter().line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            Stroke::new(1.5, ACID),
+        );
+    }
+}
+
+fn sample_sequence(
+    ui: &mut Ui,
+    lane: &mut Lane,
+    tick: usize,
+    playing: bool,
+    follow: &mut bool,
+    bar: &mut usize,
+) {
+    ui.horizontal(|ui| {
+        ui.small("LANE SEQUENCE");
+        ui.add(
+            crate::midi::drag_value(ui, &mut lane.bars)
+                .range(1..=64)
+                .prefix("LENGTH ")
+                .suffix(" bars"),
+        );
+        let bars = usize::from(lane.bars.clamp(1, 64));
+        if *follow && playing {
+            *bar = tick / 768 % bars;
+        }
+        *bar = (*bar).min(bars - 1);
+        let mut displayed = *bar + 1;
+        if ui
+            .add(
+                crate::midi::drag_value(ui, &mut displayed)
+                    .range(1..=bars)
+                    .prefix("BAR "),
+            )
+            .changed()
+        {
+            *bar = displayed - 1;
+            *follow = false;
+        }
+        ui.checkbox(follow, "FOLLOW");
+    });
+    ui.horizontal(|ui| {
+        let width = ((ui.available_width() - 15.0 * 3.0) / 16.0).max(8.0);
+        ui.spacing_mut().item_spacing.x = 3.0;
+        for step in 0..16 {
+            let index = *bar * 16 + step;
+            let on = lane.steps[index] != 0;
+            let head = playing && tick / 48 % (usize::from(lane.bars) * 16) == index;
+            let response = ui.add_sized(
+                [width, 19.0],
+                egui::Button::new(format!("{}", step + 1))
+                    .fill(if on {
+                        Color32::from_rgb(94, 112, 50)
+                    } else {
+                        FACE
+                    })
+                    .stroke(Stroke::new(
+                        if head { 2.0 } else { 1.0 },
+                        if head { ACID } else { Color32::from_gray(70) },
+                    )),
+            );
+            if response.clicked() {
+                lane.steps[index] = if on { 0 } else { 100 };
+            }
+            response.context_menu(|ui| {
+                ui.add(crate::midi::slider(ui, &mut lane.steps[index], 0..=127).text("Velocity"));
+            });
+        }
+    });
+}
+
 pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
     ui.horizontal_wrapped(|ui| {
         let mut on = lane.gater_source != 0;
@@ -286,11 +388,53 @@ pub(super) fn gater_controls(ui: &mut Ui, lane: &mut Lane, prefix: &str) {
                 .suffix("ms"),
         )
         .midi_menu(ui, &format!("{prefix}.gater_release_ms"));
+    });
+    ui.separator();
+    ui.horizontal_wrapped(|ui| {
         ui.checkbox(&mut lane.sidechain, "SIDECHAIN")
             .midi_menu(ui, &format!("{prefix}.sidechain"))
             .on_hover_text(
-                "Sampler ducking follows the selected sidechain drum voice, source and release",
+                "Duck this lane from its own selected drum voice, independently from Gater",
             );
+        egui::ComboBox::from_id_salt("lane-sidechain-source")
+            .width(76.0)
+            .selected_text(match lane.sidechain_source {
+                1 => "TR-808",
+                2 => "TR-909",
+                _ => "GLOBAL",
+            })
+            .show_ui(ui, |ui| {
+                for (value, name) in [(0, "GLOBAL"), (1, "TR-808"), (2, "TR-909")] {
+                    ui.selectable_value(&mut lane.sidechain_source, value, name)
+                        .midi_menu(ui, &format!("{prefix}.sidechain_source"));
+                }
+            })
+            .response
+            .on_hover_text("GLOBAL preserves the shared sidechain settings of older projects");
+        if lane.sidechain_source == 0 {
+            ui.small("Shared source / voice / release");
+        } else {
+            let instruments = if lane.sidechain_source == 1 {
+                [
+                    "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CB", "CY", "OH", "CH",
+                ]
+            } else {
+                [
+                    "BD", "SD", "LT", "MT", "HT", "RS", "CP", "CH", "OH", "CC", "RC",
+                ]
+            };
+            let selected = usize::from(lane.sidechain_instrument.clamp(1, 11) - 1);
+            egui::ComboBox::from_id_salt("lane-sidechain-instrument")
+                .width(48.0)
+                .selected_text(instruments[selected])
+                .show_ui(ui, |ui| {
+                    for (i, name) in instruments.into_iter().enumerate() {
+                        ui.selectable_value(&mut lane.sidechain_instrument, i as u8 + 1, name)
+                            .midi_menu(ui, &format!("{prefix}.sidechain_instrument"));
+                    }
+                });
+            ui.small("Depth 65% / shared release");
+        }
     });
 }
 
@@ -622,26 +766,13 @@ impl App {
                 .max_height(ui.available_height())
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.colored_label(ACID, egui::RichText::new("SAMPLER").strong());
                         ui.small("8 LANES / 64 BARS");
                         self.sampler_history_buttons(ui);
-                        if ui.add_enabled(!busy, egui::Button::new("LOAD")).clicked() {
-                            load = Some(selected);
-                        }
-                        if ui
-                            .add_enabled(
-                                self.studio.waves[selected].is_some(),
-                                egui::Button::new("AUDITION"),
-                            )
-                            .clicked()
-                        {
-                            audition = true;
-                        }
                         if ui.button("EDIT / ALL LANES").clicked() {
                             self.studio.sampler_open = true;
                         }
-                        ui.checkbox(&mut self.studio.follow, "Follow");
                         if busy {
                             ui.spinner();
                         }
@@ -668,17 +799,33 @@ impl App {
                         });
                         ui.vertical(|ui| {
                             ui.set_width((rect.width() * 0.75 - 16.0).max(100.0));
+                            ui.horizontal_wrapped(|ui| {
+                                ui.colored_label(ACID, &self.studio.names[selected]);
+                                if ui.add_enabled(!busy, egui::Button::new("LOAD")).clicked() {
+                                    load = Some(selected);
+                                }
+                                if ui
+                                    .add_enabled(
+                                        self.studio.waves[selected].is_some(),
+                                        egui::Button::new("AUDITION"),
+                                    )
+                                    .clicked()
+                                {
+                                    audition = true;
+                                }
+                            });
                             let lane = &mut self.studio.settings.lanes[selected];
                             if let Some(wave) = &self.studio.waves[selected] {
                                 let response = waveform(
                                     ui,
                                     &wave.frames,
-                                    (rect.height() * 0.25).max(32.0),
+                                    (rect.height() * 0.20).clamp(40.0, 72.0),
                                     lane.start,
                                     lane.end,
                                     self.studio.waveform_epoch,
                                     &mut self.studio.wave_views[selected],
                                 );
+                                sample_beat_grid(ui, response.rect, lane);
                                 if let Some(head) = self.panel.sampler_playheads[selected] {
                                     super::editors::draw_playhead(ui, response.rect, head.source);
                                 }
@@ -736,7 +883,10 @@ impl App {
                                 });
                             } else {
                                 ui.allocate_ui(
-                                    Vec2::new(ui.available_width(), rect.height() * 0.28),
+                                    Vec2::new(
+                                        ui.available_width(),
+                                        (rect.height() * 0.20).clamp(40.0, 72.0),
+                                    ),
                                     |ui| {
                                         ui.centered_and_justified(|ui| {
                                             ui.label("LOAD WAV / AIFF / MP3");
@@ -744,93 +894,57 @@ impl App {
                                     },
                                 );
                             }
+                            let mode_width = (ui.available_width() - 210.0).max(170.0);
                             ui.horizontal_wrapped(|ui| {
-                                for (mode, label) in [
-                                    (Mode::OneShot, "ONE SHOT"),
-                                    (Mode::AutoCut, "AUTO CUT"),
-                                    (Mode::Gate, "GATE"),
-                                    (Mode::Loop, "LOOP"),
-                                ] {
-                                    ui.selectable_value(&mut lane.mode, mode, label)
-                                        .midi_menu(ui, &format!("sampler{}.mode", selected + 1));
-                                }
-                                if ui
-                                    .selectable_label(lane.reverse, "REVERSE")
-                                    .midi_menu(ui, &format!("sampler{}.reverse", selected + 1))
-                                    .clicked()
-                                {
-                                    lane.reverse = !lane.reverse;
-                                }
+                                ui.vertical(|ui| {
+                                    ui.set_width(mode_width);
+                                    ui.horizontal_wrapped(|ui| {
+                                        for (mode, label) in [
+                                            (Mode::OneShot, "ONE SHOT"),
+                                            (Mode::AutoCut, "AUTO CUT"),
+                                            (Mode::Gate, "GATE"),
+                                            (Mode::Loop, "LOOP"),
+                                        ] {
+                                            ui.selectable_value(&mut lane.mode, mode, label)
+                                                .midi_menu(
+                                                    ui,
+                                                    &format!("sampler{}.mode", selected + 1),
+                                                );
+                                        }
+                                    });
+                                    if ui
+                                        .selectable_label(lane.reverse, "REVERSE")
+                                        .midi_menu(ui, &format!("sampler{}.reverse", selected + 1))
+                                        .clicked()
+                                    {
+                                        lane.reverse = !lane.reverse;
+                                    }
+                                });
                                 sample_knobs(ui, lane, &format!("sampler{}", selected + 1));
                             });
+                            ui.separator();
                             let frames =
                                 self.studio.waves[selected].as_ref().map(|w| w.frames.len());
                             if warp_controls(ui, lane, frames, &format!("sampler{}", selected + 1))
                             {
                                 self.studio.warp_editor = Some(selected);
                             }
-                            gater_controls(ui, lane, &format!("sampler{}", selected + 1));
-                            let bars = usize::from(lane.bars.clamp(1, 64));
-                            if self.studio.follow && self.panel.transport.playing {
-                                self.studio.bar = tick / 768 % bars;
-                            }
-                            self.studio.bar = self.studio.bar.min(bars - 1);
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    crate::midi::drag_value(ui, &mut lane.bars)
-                                        .range(1..=64)
-                                        .prefix("Length ")
-                                        .suffix(" bars"),
-                                );
-                                let mut bar = self.studio.bar + 1;
-                                if ui
-                                    .add(
-                                        crate::midi::drag_value(ui, &mut bar)
-                                            .range(1..=bars)
-                                            .prefix("Bar "),
-                                    )
-                                    .changed()
-                                {
-                                    self.studio.bar = bar - 1;
-                                    self.studio.follow = false;
-                                }
-                            });
-                            ui.horizontal(|ui| {
-                                let width = ((ui.available_width() - 15.0 * 3.0) / 16.0).max(8.0);
-                                ui.spacing_mut().item_spacing.x = 3.0;
-                                for step in 0..16 {
-                                    let index = self.studio.bar * 16 + step;
-                                    let on = lane.steps[index] != 0;
-                                    let head = self.panel.transport.playing
-                                        && tick / 48 % (usize::from(lane.bars) * 16) == index;
-                                    let button = egui::Button::new(format!("{}", step + 1))
-                                        .fill(if on {
-                                            Color32::from_rgb(94, 112, 50)
-                                        } else {
-                                            FACE
-                                        })
-                                        .stroke(Stroke::new(
-                                            if head { 2.0 } else { 1.0 },
-                                            if head { ACID } else { Color32::from_gray(70) },
-                                        ));
-                                    let response = ui.add_sized([width, 19.0], button);
-                                    if response.clicked() {
-                                        lane.steps[index] = if on { 0 } else { 100 };
-                                    }
-                                    response.context_menu(|ui| {
-                                        ui.add(
-                                            crate::midi::slider(
-                                                ui,
-                                                &mut lane.steps[index],
-                                                0..=127,
-                                            )
-                                            .text("Velocity"),
-                                        );
-                                    });
-                                }
-                            });
+                            egui::CollapsingHeader::new("GATER / SIDECHAIN")
+                                .id_salt(("sampler-rack-gater", selected))
+                                .show(ui, |ui| {
+                                    gater_controls(ui, lane, &format!("sampler{}", selected + 1));
+                                });
                         });
                     });
+                    ui.separator();
+                    sample_sequence(
+                        ui,
+                        &mut self.studio.settings.lanes[selected],
+                        tick,
+                        self.panel.transport.playing,
+                        &mut self.studio.follow,
+                        &mut self.studio.bar,
+                    );
                 });
         });
         self.graphite_sampler_mixer(ui, mixer);
@@ -879,34 +993,49 @@ impl App {
                         }
                     });
                     ui.label(&self.studio.ir_name);
-                    ui.horizontal(|ui| {
+                    ui.columns(2, |columns| {
                         let s = &mut self.studio.settings;
-                        float_knob(ui, &mut s.return_gain, 0.0..=1.0, "RETURN", "studio.return");
-                        float_knob(
-                            ui,
+                        compact_knob(
+                            &mut columns[0],
+                            &mut s.return_gain,
+                            0.0..=1.0,
+                            "RETURN",
+                            "studio.return",
+                            false,
+                        );
+                        compact_knob(
+                            &mut columns[1],
                             &mut s.predelay_ms,
                             0.0..=200.0,
                             "PREDELAY",
                             "studio.predelay",
+                            false,
                         );
-                        float_knob(ui, &mut s.width, 0.0..=2.0, "WIDTH", "studio.width");
-                    });
-                    ui.horizontal(|ui| {
-                        float_knob(
-                            ui,
-                            &mut self.studio.settings.low_cut,
+                        compact_knob(
+                            &mut columns[0],
+                            &mut s.width,
+                            0.0..=2.0,
+                            "WIDTH",
+                            "studio.width",
+                            false,
+                        );
+                        compact_knob(
+                            &mut columns[1],
+                            &mut s.low_cut,
                             20.0..=2000.0,
                             "LOW CUT",
                             "studio.low_cut",
+                            false,
                         );
-                        float_knob(
-                            ui,
-                            &mut self.studio.settings.high_cut,
+                        compact_knob(
+                            &mut columns[0],
+                            &mut s.high_cut,
                             2000.0..=20000.0,
                             "HIGH CUT",
                             "studio.high_cut",
+                            false,
                         );
-                        if ui.small_button("IR / SENDS").clicked() {
+                        if columns[1].small_button("IR / SENDS").clicked() {
                             self.studio.reverb_open = true;
                         }
                     });
@@ -969,7 +1098,7 @@ impl App {
                         ui.colored_label(ACID, "MASTER");
                         let on = self.panel.toggle_on("master.comp");
                         if ui
-                            .selectable_label(on, "COMP")
+                            .add(egui::Button::new("COMP").selected(on))
                             .midi_menu(ui, "master.comp")
                             .clicked()
                         {
@@ -1069,6 +1198,130 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn space_knob_labels_stay_in_the_card_and_do_not_overlap() {
+        fn collect(shape: &egui::Shape, labels: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Text(t) => labels.push((
+                    t.galley.text().into(),
+                    Rect::from_min_size(t.pos, t.galley.size()),
+                )),
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        collect(shape, labels);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for width in [175.0, 220.0] {
+            let ctx = egui::Context::default();
+            let mut app = App::new(crate::model::Panel::new(), None);
+            let rack = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(width, 1000.0));
+            let card = Rect::from_min_size(rack.min, Vec2::new(width, 223.0));
+            let mut labels = Vec::new();
+            for _ in 0..2 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            Vec2::new(400.0, 1100.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.graphite_fx(ui, rack),
+                );
+                output.textures_delta.clear();
+                labels.clear();
+                for shape in output.shapes {
+                    collect(&shape.shape, &mut labels);
+                }
+            }
+            let knobs: Vec<_> = ["RETURN", "PREDELAY", "WIDTH", "LOW CUT", "HIGH CUT"]
+                .into_iter()
+                .map(|name| {
+                    labels
+                        .iter()
+                        .find(|(text, rect)| text == name && card.contains_rect(*rect))
+                        .unwrap_or_else(|| panic!("{name} escapes SPACE at width {width}"))
+                        .1
+                })
+                .collect();
+            for (i, a) in knobs.iter().enumerate() {
+                for b in &knobs[i + 1..] {
+                    assert!(!a.intersects(*b), "SPACE labels overlap at width {width}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sampler_focus_keeps_modes_knobs_and_sequence_visible_with_gater_collapsed() {
+        fn text_bounds(shape: &egui::Shape, labels: &mut Vec<(String, Rect)>) {
+            match shape {
+                egui::Shape::Text(t) => labels.push((
+                    t.galley.text().into(),
+                    Rect::from_min_size(t.pos, t.galley.size()),
+                )),
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        text_bounds(shape, labels);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let ctx = egui::Context::default();
+        let mut app = App::new(crate::model::Panel::new(), None);
+        app.studio.ready = true;
+        let card = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(1100.0, 320.0));
+        let before = app.studio.settings.clone();
+        let mut labels = Vec::new();
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(1150.0, 400.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| app.graphite_sampler(ui, card),
+            );
+            output.textures_delta.clear();
+            labels.clear();
+            for shape in output.shapes {
+                text_bounds(&shape.shape, &mut labels);
+            }
+        }
+        for name in [
+            "ONE SHOT",
+            "AUTO CUT",
+            "GATE",
+            "LOOP",
+            "REVERSE",
+            "PITCH",
+            "LEVEL",
+            "REVERB",
+            "WARP",
+            "GATER / SIDECHAIN",
+            "LANE SEQUENCE",
+            "FOLLOW",
+        ] {
+            let rect = labels
+                .iter()
+                .find(|(text, _)| text == name)
+                .unwrap_or_else(|| panic!("Missing {name}: {labels:?}"))
+                .1;
+            assert!(
+                card.contains_rect(rect),
+                "{name} escapes the sampler card: {rect:?}"
+            );
+        }
+        assert!(!labels.iter().any(|(text, _)| text.starts_with("Depth ")));
+        assert_eq!(app.studio.settings, before);
+    }
 
     #[test]
     fn right_click_sample_name_opens_unload_for_that_lane_without_selecting_it() {

@@ -2,6 +2,111 @@ use super::*;
 use crate::process::DrumCounters;
 use crate::samples::{COUNT, FIRST_ID, Retired};
 
+#[test]
+fn studio_extended_909_steps_wrap_restart_and_keep_native_first_page() {
+    for length in [32, 64] {
+        let mut native = [[0; 12]; 16];
+        native[0][BD] = 1;
+        let mut d = device_with(ProcessState::new(), rbs_defaults(), &native);
+        let mut bank = crate::studio::drums::Bank::default();
+        bank.patterns[0].length = length;
+        bank.patterns[0].steps[0][BD] = 1;
+        bank.patterns[0].steps[usize::from(length) - 17][BD] = 1;
+        d.set_drum_bank(Some(Arc::new(bank)));
+        for (step, hits) in [(0, 1), (16, 2), (i32::from(length) - 1, 3)] {
+            d.step(step * 48, step * 48, 140_000);
+            assert_eq!(d.drum_trigger_count(BD), hits);
+            d.step(step * 48, step * 48, 140_000);
+            assert_eq!(d.drum_trigger_count(BD), hits, "same step retriggered");
+            assert_eq!(d.live[LAST_STEP], step as u8);
+        }
+        d.step(i32::from(length) * 48, i32::from(length) * 48, 140_000);
+        assert_eq!(d.drum_trigger_count(BD), 4);
+        assert_eq!(d.live[LAST_STEP], 0);
+        d.stop();
+        d.relocate(0, 0);
+        d.start(0);
+        d.step(0, 0, 140_000);
+        assert_eq!(d.drum_trigger_count(BD), 5);
+    }
+}
+
+#[test]
+fn studio_909_pattern_change_starts_new_extended_pattern_at_bar_boundary() {
+    let mut d = device_with(ProcessState::new(), rbs_defaults(), &[]);
+    d.patterns[PATTERN_LEN + 2 + BD] = 1;
+    let mut bank = crate::studio::drums::Bank::default();
+    bank.patterns[0].length = 64;
+    bank.patterns[1].length = 32;
+    d.set_drum_bank(Some(Arc::new(bank)));
+    d.step(0, 0, 140_000);
+    d.live[PATTERN] = 1;
+    d.step(720, 720, 140_000);
+    assert_eq!(d.cur_pattern, 0);
+    d.step(768, 768, 140_000);
+    assert_eq!(d.cur_pattern, 1);
+    assert_eq!(d.live[LAST_STEP], 0);
+    assert_eq!(d.drum_trigger_count(BD), 1);
+}
+
+#[test]
+fn studio_909_pattern_change_handles_skipped_exact_bar_tick() {
+    for (old_length, new_length) in [(64, 32), (0, 64)] {
+        for song_mode in [false, true] {
+            let mut d = device_with(ProcessState::new(), rbs_defaults(), &[]);
+            d.song_mode = song_mode;
+            d.patterns[PATTERN_LEN + 2 + BD] = 1;
+            let mut bank = crate::studio::drums::Bank::default();
+            bank.patterns[0].length = old_length;
+            bank.patterns[1].length = new_length;
+            d.set_drum_bank(Some(Arc::new(bank)));
+            d.step(0, 0, 140_000);
+            d.step(765, 765, 140_000);
+            assert_eq!(d.cur_pattern, 0);
+            d.live[PATTERN] = 1;
+            d.step(772, 772, 140_000);
+            assert_eq!(d.cur_pattern, 1);
+            assert_eq!(d.live[LAST_STEP], 0);
+            assert_eq!(d.extended_origin, 768);
+            assert_eq!(d.drum_trigger_count(BD), 1);
+            d.step(775, 775, 140_000);
+            assert_eq!(d.drum_trigger_count(BD), 1, "first step retriggered");
+        }
+    }
+}
+
+#[test]
+fn studio_909_seek_keeps_absolute_page_and_legacy_bank_is_inert() {
+    let mut native = [[0; 12]; 16];
+    native[0][BD] = 1;
+    let mut d = device_with(ProcessState::new(), rbs_defaults(), &native);
+    let mut legacy = device_with(ProcessState::new(), rbs_defaults(), &native);
+    d.set_drum_bank(Some(Arc::default()));
+    for tick in (0..4000).step_by(8) {
+        d.step(tick, tick, 140_000);
+        legacy.step(tick, tick, 140_000);
+        assert_eq!(d.live, legacy.live);
+        assert_eq!(d.triggers, legacy.triggers);
+    }
+    let mut bank = crate::studio::drums::Bank::default();
+    bank.patterns[0].length = 64;
+    bank.patterns[0].steps[16][BD] = 3;
+    d.set_drum_bank(Some(Arc::new(bank)));
+    d.relocate(1536, 1536);
+    d.start(1536);
+    let before = d.drum_trigger_count(BD);
+    d.step(1536, 1536, 140_000);
+    assert_eq!(d.live[LAST_STEP], 32);
+    assert_eq!(d.drum_trigger_count(BD), before + 1);
+    let flam = d.flam_tick + 1;
+    d.step(flam, flam, 140_000);
+    assert_eq!(
+        d.drum_trigger_count(BD),
+        before + 2,
+        "extended flam missing"
+    );
+}
+
 /// A sample set whose resource `id` holds `id - 900` frames of the value `id - 1000` (the 909
 /// kit's slot number), so every voice's sample can be told apart.
 fn set() -> Arc<SampleSet> {

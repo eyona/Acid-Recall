@@ -254,6 +254,8 @@ pub trait SongDevice: Send {
 
 /// A mixer channel's sound source: TB-303 #1, #2, TR-808 or TR-909.
 pub trait ChannelDevice: SongDevice {
+    /// Optional Studio tail bank. Keep another owner alive while replacing this on the callback.
+    fn set_drum_bank(&mut self, _bank: Option<Arc<crate::studio::drums::Bank>>) {}
     fn set_independent_hats(&mut self, _independent: bool) {}
     /// Optional extension: a separate closed-hat level, None for the legacy shared control.
     fn set_closed_hat_level(&mut self, _level: Option<u8>) {}
@@ -856,6 +858,17 @@ fn meter_byte(x: f64, full: bool) -> u8 {
 }
 
 impl Frame {
+    /// Attach Studio pattern tails before offline rendering after assigning `studio` directly.
+    /// The player does the same while the previous settings still retain their banks.
+    pub fn sync_studio_drum_banks(&mut self) {
+        for (index, channel) in self.devices.channels[2..].iter_mut().enumerate() {
+            let bank = self
+                .studio
+                .as_ref()
+                .map(|studio| studio.settings.drum_patterns[index].clone());
+            channel.set_drum_bank(bank);
+        }
+    }
     pub fn new(tables: Arc<Tables>, devices: Devices) -> Self {
         Frame {
             independent_hats: false,

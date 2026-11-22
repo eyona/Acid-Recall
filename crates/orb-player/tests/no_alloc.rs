@@ -86,6 +86,43 @@ fn the_counter_counts() {
 }
 
 #[test]
+fn studio_drum_bank_replacement_and_clear_do_not_allocate_or_free_in_callback() {
+    let (mut player, mut audio) = Player::new(tables(), Some(samples()));
+    let mut buf = [0; 2 * CALL_FRAMES];
+    let convolver =
+        || Box::new(orb_engine::studio::convolution::Convolver::new(&[[0.0; 2]; 64]).unwrap());
+    send(
+        &mut player,
+        Command::Studio(Box::new(orb_engine::studio::Studio::new(convolver()))),
+    );
+    assert_eq!(render(&mut audio, &mut buf, 1), 0);
+    player.collect_garbage();
+    let mut settings = Box::<orb_engine::studio::Settings>::default();
+    for bank in &mut settings.drum_patterns {
+        let bank = std::sync::Arc::make_mut(bank);
+        bank.patterns[0].length = 64;
+        bank.patterns[0].steps[0][1] = 1;
+        bank.patterns[0].steps[47][1] = 1;
+    }
+    let old_bank = std::sync::Arc::downgrade(&settings.drum_patterns[0]);
+    send(&mut player, Command::StudioSettings(settings));
+    send(&mut player, Command::Play);
+    assert_eq!(render(&mut audio, &mut buf, 300), 0);
+    player.collect_garbage();
+    send(&mut player, Command::StudioSettings(Box::default()));
+    assert_eq!(render(&mut audio, &mut buf, 1), 0);
+    assert!(
+        old_bank.upgrade().is_some(),
+        "bank freed before UI retirement"
+    );
+    player.collect_garbage();
+    assert!(old_bank.upgrade().is_none());
+    send(&mut player, Command::StudioClear);
+    assert_eq!(render(&mut audio, &mut buf, 1), 0);
+    player.collect_garbage();
+}
+
+#[test]
 fn parallel_armed_tests_do_not_count_each_others_allocations() {
     use std::sync::{Arc, atomic::AtomicBool};
     let start = Arc::new(AtomicBool::new(false));

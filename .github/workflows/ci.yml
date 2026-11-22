@@ -15,7 +15,7 @@ on:
   # is ignored, tests/refs/MANIFEST.md too: no test reads it.) Keep the two lists equal
   # (no YAML anchors). release.yml (tags) has no filter.
   push:
-    branches: [main]
+    branches: [main, codex/ux-trial-20261122]
     paths-ignore:
       - "backlog/**"
       - "docs/**"

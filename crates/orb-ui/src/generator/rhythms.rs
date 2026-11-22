@@ -3,11 +3,11 @@
 use super::{DrumStyle, Options, Rng};
 
 pub(super) fn pattern(o: &Options, is808: bool, length: u8, seed: u64) -> Vec<u8> {
-    let length = usize::from(length.clamp(1, 16));
+    let length = usize::from(length.clamp(1, 64));
     let density = o.drum_density.min(100);
     let variation = o.variation.min(100);
     let mut rng = Rng(seed);
-    let mut bytes = vec![0; 194];
+    let mut bytes = vec![0; (2 + 12 * length).max(194)];
     bytes[1] = length as u8;
     if density == 0 {
         return bytes;
@@ -21,6 +21,8 @@ pub(super) fn pattern(o: &Options, is808: bool, length: u8, seed: u64) -> Vec<u8
     };
     for s in 0..length {
         let step = &mut bytes[2 + 12 * s..14 + 12 * s];
+        // Keep each bar's rhythmic grammar while the RNG develops the full phrase.
+        let s = s % 16;
         match o.drum_style {
             DrumStyle::Techno => {
                 if s % 4 == 0 || (s == 15 && rng.chance(variation / 5)) {

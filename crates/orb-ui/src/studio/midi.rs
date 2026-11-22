@@ -78,6 +78,8 @@ pub fn controls() -> Vec<(String, String)> {
             "gater_attack_ms",
             "gater_release_ms",
             "sidechain",
+            "sidechain_source",
+            "sidechain_instrument",
         ] {
             out.push((
                 format!("sampler{i}.{name}"),
@@ -175,6 +177,8 @@ fn lane_value(lane: &Lane, name: &str) -> f64 {
         "mute" => f64::from(u8::from(lane.muted)),
         "solo" => f64::from(u8::from(lane.solo)),
         "sidechain" => f64::from(u8::from(lane.sidechain)),
+        "sidechain_source" => f64::from(lane.sidechain_source) / 2.0,
+        "sidechain_instrument" => f64::from(lane.sidechain_instrument.saturating_sub(1)) / 10.0,
         _ => 0.0,
     }
 }
@@ -334,6 +338,10 @@ impl App {
                             "mute" => lane.muted = raw >= 64,
                             "solo" => lane.solo = raw >= 64,
                             "sidechain" => lane.sidechain = raw >= 64,
+                            "sidechain_source" => lane.sidechain_source = (v * 2.0).round() as u8,
+                            "sidechain_instrument" => {
+                                lane.sidechain_instrument = gater_instrument(v);
+                            }
                             _ => {}
                         }
                     }
@@ -396,6 +404,8 @@ impl App {
                     "choke" => (v * 8.0).round() as u8 == lane.choke,
                     "gater_source" => (v * 4.0).round() as u8 == lane.gater_source,
                     "gater_instrument" => gater_instrument(v) == lane.gater_instrument,
+                    "sidechain_source" => (v * 2.0).round() as u8 == lane.sidechain_source,
+                    "sidechain_instrument" => gater_instrument(v) == lane.sidechain_instrument,
                     "warp_beats" => warp_beat_count(v) == lane.warp_beats,
                     "end" => {
                         ((1e-9 + v * (1.0 - 1e-9)).max(lane.start + 1e-9) - lane.end).abs() < 1e-12
@@ -577,7 +587,7 @@ mod tests {
 
     #[test]
     fn all_studio_controls_are_registered_with_correct_midi_behavior() {
-        assert_eq!(controls().len(), 233);
+        assert_eq!(controls().len(), 249);
         for (id, _) in controls() {
             assert!(kind(&id).is_some(), "{id}");
             assert!(Panel::new().value(&id).is_some(), "{id}");
@@ -725,6 +735,44 @@ mod tests {
             move_cc(&mut app, &mut router, "sampler8.gater_hold", cc, false);
             assert_eq!(app.studio.settings.lanes[7].gater_hold, hold);
         }
+    }
+
+    #[test]
+    fn sampler_sidechain_source_and_voice_have_independent_midi_pickup() {
+        let mut app = App::new(Panel::new(), None);
+        let mut router = Router::default();
+        for (cc, source) in [(0, 0), (64, 1), (127, 2)] {
+            move_cc(
+                &mut app,
+                &mut router,
+                "sampler1.sidechain_source",
+                cc,
+                false,
+            );
+            assert_eq!(app.studio.settings.lanes[0].sidechain_source, source);
+        }
+        move_cc(
+            &mut app,
+            &mut router,
+            "sampler1.sidechain_instrument",
+            127,
+            false,
+        );
+        assert_eq!(app.studio.settings.lanes[0].sidechain_instrument, 11);
+        for cc in (0..=127).rev() {
+            move_cc(
+                &mut app,
+                &mut router,
+                "sampler1.sidechain_instrument",
+                cc,
+                true,
+            );
+            assert_eq!(app.panel.value("sampler1.sidechain_instrument"), Some(cc));
+        }
+        let lane = &app.studio.settings.lanes[0];
+        assert_eq!(lane.sidechain_instrument, 1);
+        assert_eq!(lane.gater_source, 0);
+        assert_eq!(lane.gater_instrument, 1);
     }
 
     #[test]

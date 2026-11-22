@@ -124,6 +124,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, Exit> {
                     Some("space") => "space".into(),
                     Some("warp") => "warp".into(),
                     Some("audio") => "audio".into(),
+                    Some("trial") => "trial".into(),
                     _ => return Err(Exit::Bad),
                 });
             }
@@ -372,6 +373,18 @@ fn main() -> eframe::Result {
                 }
             });
             if let Some(view) = studio_view {
+                if view == "trial" && demo {
+                    for (machine, length) in [(0, 32), (1, 64)] {
+                        let pattern = app.panel.rows[machine + 2].pattern as usize;
+                        let bank = Arc::make_mut(&mut app.studio.settings.drum_patterns[machine]);
+                        bank.patterns[pattern].length = length;
+                        for step in (0..48).step_by(4) {
+                            bank.patterns[pattern].steps[step][1] = 1;
+                        }
+                    }
+                    app.panel.synth[0].patterns[0][2].accent = true;
+                    app.panel.synth[0].patterns[0][2].slide = true;
+                }
                 app.audio_preferences.open = view == "audio";
                 app.audio_preferences.draft = app.settings.audio.clone();
                 app.studio.sampler_open = view == "sampler";

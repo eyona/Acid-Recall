@@ -99,12 +99,17 @@ struct Rack {
 }
 
 impl Rack {
+    #[cfg(test)]
     fn fit(avail: Rect) -> Self {
+        Self::fit_height(avail, HEIGHT)
+    }
+
+    fn fit_height(avail: Rect, height: f32) -> Self {
         let scale = (avail.width() / WIDTH)
-            .min(avail.height() / HEIGHT)
+            .min(avail.height() / height)
             .max(0.1);
         Self {
-            origin: avail.center() - Vec2::new(WIDTH, HEIGHT) * scale * 0.5,
+            origin: avail.center() - Vec2::new(WIDTH, height) * scale * 0.5,
             scale,
         }
     }
@@ -164,19 +169,49 @@ fn button(
         Stroke::new(rack.scale, if selected { ACID } else { BORDER }),
         egui::StrokeKind::Inside,
     );
+    let compact = matches!(
+        text,
+        "COMP"
+            | "PCF"
+            | "DIST"
+            | "REV"
+            | "CONGA"
+            | "CLAVE"
+            | "MARACA"
+            | "CON"
+            | "CLA"
+            | "MAR"
+            | "TOM"
+            | "RIM"
+            | "CLAP"
+    );
+    let preferred = if compact { 9.5 } else { 11.0 } * rack.scale;
+    let font = fitted_button_font(ui, rect, text, preferred, rack.scale);
     ui.painter().text(
         rect.center(),
         Align2::CENTER_CENTER,
         text,
-        FontId::proportional(11.0 * rack.scale),
+        font,
         if selected { Color32::BLACK } else { INK },
     );
     response
 }
 
+fn fitted_button_font(ui: &Ui, rect: Rect, text: &str, preferred: f32, scale: f32) -> FontId {
+    let font = FontId::proportional(preferred);
+    let measured = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font.clone(), INK);
+    let available = (rect.size() - Vec2::new(8.0, 4.0) * scale).max(Vec2::splat(1.0));
+    let fit = (available.x / measured.size().x.max(1.0))
+        .min(available.y / measured.size().y.max(1.0))
+        .min(1.0);
+    FontId::proportional(preferred * fit)
+}
+
 /// Slots under each TB's routing buttons, reserved for its independent sidechain controls.
-pub(crate) fn sidechain_areas(avail: Rect) -> [Rect; 2] {
-    let rack = Rack::fit(avail);
+pub(crate) fn sidechain_areas(avail: Rect, extra_height: f32) -> [Rect; 2] {
+    let rack = Rack::fit_height(avail, HEIGHT + extra_height);
     [0, 1].map(|row| rack.rect(858.0, ROWS[row].0 + 119.0, 176.0, 39.0))
 }
 
@@ -404,16 +439,33 @@ pub(crate) fn mixer_button(
 }
 
 impl App {
+    pub(crate) fn graphite_extra_height(&self) -> f32 {
+        [2, 3]
+            .into_iter()
+            .filter(|&row| self.drum_length(row) > 16)
+            .count() as f32
+            * 82.0
+    }
     /// Draw transport, four instruments and their mixer strips. The caller embeds the sampler
     /// and effects in the returned rectangles, in screen coordinates.
     pub(crate) fn graphite_rack(&mut self, ui: &mut Ui, avail: Rect) -> (Rect, Rect) {
-        let rack = Rack::fit(avail);
+        let extra = [2, 3].map(|row| {
+            if self.drum_length(row) > 16 {
+                82.0
+            } else {
+                0.0
+            }
+        });
+        let extra_height = extra.iter().sum::<f32>();
+        let rack = Rack::fit_height(avail, HEIGHT + extra_height);
         ui.painter()
             .rect_filled(avail, 0.0, Color32::from_rgb(12, 14, 14));
         let active = !self.browsing() && !self.prompting() && !self.error_open();
         ui.add_enabled_ui(active, |ui| {
             self.rack_transport(ui, rack);
-            for (row, &(y, h)) in ROWS.iter().enumerate() {
+            for (row, &(base_y, base_h)) in ROWS.iter().enumerate() {
+                let y = base_y + if row == 3 { extra[0] } else { 0.0 };
+                let h = base_h + if row >= 2 { extra[row - 2] } else { 0.0 };
                 rack.card(ui, rack.rect(14.0, y, 1030.0, h));
                 ui.painter().rect_filled(
                     rack.rect(14.0, y + 10.0, 3.0, h - 20.0),
@@ -500,8 +552,8 @@ impl App {
         });
         self.rack_advanced(ui);
         (
-            rack.rect(14.0, 962.0, 1030.0, 320.0),
-            rack.rect(1058.0, 84.0, 208.0, 1202.0),
+            rack.rect(14.0, 962.0 + extra_height, 1030.0, 320.0),
+            rack.rect(1058.0, 84.0, 208.0, 1202.0 + extra_height),
         )
     }
 
@@ -603,7 +655,7 @@ impl App {
             rack,
             rack.rect(1140.0, 25.0, 104.0, 29.0),
             "master.comp",
-            "COMP MASTER",
+            "COMP",
             comp,
         )
         .midi_menu(ui, "master.comp")
@@ -648,34 +700,53 @@ impl App {
             }
         }
         let p = self.panel.rows[row].pattern as usize;
-        rack.text(
-            ui,
-            30.0,
-            y + 103.0,
-            9.0,
-            &format!("LENGTH {:02}", self.panel.rows[row].len[p]),
-            DIM,
-        );
-        for (up, x, label) in [(false, 102.0, "-"), (true, 125.0, "+")] {
-            if button(
+        if row >= 2 {
+            let length = self.drum_length(row);
+            rack.text(ui, 30.0, y + 103.0, 9.0, "LENGTH", DIM);
+            for (i, length_option) in [16, 32, 64].into_iter().enumerate() {
+                if button(
+                    ui,
+                    rack,
+                    rack.rect(92.0 + i as f32 * 37.0, y + 94.0, 33.0, 19.0),
+                    (row, "extended-length", length_option),
+                    &length_option.to_string(),
+                    length == length_option,
+                )
+                .clicked()
+                {
+                    self.drum_set_length(row, length_option);
+                }
+            }
+        } else {
+            rack.text(
                 ui,
-                rack,
-                rack.rect(x, y + 94.0, 20.0, 19.0),
-                (row, "length", up),
-                label,
-                false,
-            )
-            .clicked()
-            {
-                let len = i32::from(self.panel.rows[row].len[p]) + if up { 1 } else { -1 };
-                self.panel.set_pattern_length(row, len.clamp(1, 16) as u8);
+                30.0,
+                y + 103.0,
+                9.0,
+                &format!("LENGTH {:02}", self.panel.rows[row].len[p]),
+                DIM,
+            );
+            for (up, x, label) in [(false, 102.0, "-"), (true, 125.0, "+")] {
+                if button(
+                    ui,
+                    rack,
+                    rack.rect(x, y + 94.0, 20.0, 19.0),
+                    (row, "length", up),
+                    label,
+                    false,
+                )
+                .clicked()
+                {
+                    let len = i32::from(self.panel.rows[row].len[p]) + if up { 1 } else { -1 };
+                    self.panel.set_pattern_length(row, len.clamp(1, 16) as u8);
+                }
             }
         }
         let id = format!("{section}.shuffle");
         if button(
             ui,
             rack,
-            rack.rect(152.0, y + 94.0, 54.0, 19.0),
+            rack.rect(152.0, y + if row >= 2 { 123.0 } else { 94.0 }, 54.0, 19.0),
             &id,
             "SWING",
             self.panel.toggle_on(&id),
@@ -689,7 +760,7 @@ impl App {
             if button(
                 ui,
                 rack,
-                rack.rect(28.0, y + 123.0, 178.0, 19.0),
+                rack.rect(28.0, y + 123.0, 118.0, 19.0),
                 (row, "groove"),
                 "GROOVE GENERATOR",
                 false,
@@ -760,7 +831,13 @@ impl App {
                 NOTES[usize::from(note.note.min(12))]
             };
             let rect = rack.rect(224.0 + step as f32 * 38.0, y + 126.0, 34.0, 27.0);
-            let response = button(ui, rack, rect, (row, "tb-step", step), label, selected);
+            let response = button(ui, rack, rect, (row, "tb-step", step), label, selected)
+                .on_hover_text(format!(
+                    "Step {:02}: {label}\nAccent: {} / Slide: {}\nRight-click to edit",
+                    step + 1,
+                    if note.accent { "on" } else { "off" },
+                    if note.slide { "on" } else { "off" },
+                ));
             if step >= length {
                 ui.painter()
                     .rect_filled(rect, 3.0 * rack.scale, Color32::from_black_alpha(155));
@@ -773,19 +850,21 @@ impl App {
                 );
             }
             if note.accent {
-                ui.painter().circle_filled(
-                    rect.right_top() + Vec2::new(-4.0, 4.0) * rack.scale,
-                    1.7 * rack.scale,
+                ui.painter().text(
+                    rect.left_bottom() + Vec2::new(3.0, -1.0) * rack.scale,
+                    Align2::LEFT_BOTTOM,
+                    "A",
+                    FontId::proportional(8.0 * rack.scale),
                     if selected { Color32::BLACK } else { ACID },
                 );
             }
             if note.slide {
-                ui.painter().line_segment(
-                    [
-                        rect.left_bottom() + Vec2::new(5.0, -3.0) * rack.scale,
-                        rect.right_bottom() + Vec2::new(-5.0, -3.0) * rack.scale,
-                    ],
-                    Stroke::new(rack.scale, DIM),
+                ui.painter().text(
+                    rect.right_bottom() + Vec2::new(-3.0, -1.0) * rack.scale,
+                    Align2::RIGHT_BOTTOM,
+                    "S",
+                    FontId::proportional(8.0 * rack.scale),
+                    if selected { Color32::BLACK } else { ACID },
                 );
             }
             if response.clicked() || response.secondary_clicked() {
@@ -799,10 +878,18 @@ impl App {
             response.context_menu(|ui| {
                 ui.label(format!("STEP {:02}", step + 1));
                 let mut pitch = note.note.min(12);
-                if ui
-                    .add(crate::midi::slider(ui, &mut pitch, 0..=12).text("Note"))
-                    .changed()
-                {
+                ui.horizontal(|ui| {
+                    ui.label("Note");
+                    egui::ComboBox::from_id_salt(("tb-step-note", row, step))
+                        .selected_text(NOTES[usize::from(pitch)])
+                        .width(80.0)
+                        .show_ui(ui, |ui| {
+                            for (value, label) in NOTES.iter().enumerate() {
+                                ui.selectable_value(&mut pitch, value as u8, *label);
+                            }
+                        });
+                });
+                if pitch != note.note.min(12) {
                     self.panel.synth[row].edit = step as u8;
                     self.panel
                         .press(&format!("tb303_{}.key{pitch}", row + 1), 0.0);
@@ -859,11 +946,11 @@ impl App {
                 let original = self.panel.switch_position(&id) != 0;
                 let label = match (i, original) {
                     (3..=5, true) => "TOM",
-                    (3..=5, false) => "CONGA",
+                    (3..=5, false) => "CON",
                     (6, true) => "RIM",
-                    (6, false) => "CLAVE",
+                    (6, false) => "CLA",
                     (_, true) => "CLAP",
-                    (_, false) => "MARACA",
+                    (_, false) => "MAR",
                 };
                 if button(
                     ui,
@@ -873,6 +960,14 @@ impl App {
                     label,
                     original,
                 )
+                .on_hover_text(match label {
+                    "CON" => "Conga",
+                    "CLA" => "Clave",
+                    "MAR" => "Maraca",
+                    "TOM" => "Tom",
+                    "RIM" => "Rimshot",
+                    _ => "Clap",
+                })
                 .midi_menu(ui, &id)
                 .clicked()
                 {
@@ -914,20 +1009,24 @@ impl App {
                 self.panel.focus = row;
             }
         }
-        let length = usize::from(self.panel.rows[row].len[self.panel.rows[row].pattern as usize]);
+        let length = self.drum_length(row);
+        let page = self.rack_drum_pages(ui, rack, row, y, length);
         for step in 0..16 {
-            let value = if row == 2 {
-                u8::from(self.panel.steps808[self.panel.inst808][step])
+            let global_step = page * 16 + step;
+            let instrument = if row == 2 {
+                self.panel.inst808
             } else {
-                self.panel.steps909[self.panel.inst909][step]
+                self.panel.inst909
             };
-            let rect = rack.rect(224.0 + step as f32 * 38.0, y + 226.0, 34.0, 19.0);
+            let value = self.drum_step(row, instrument, global_step);
+            let step_y = if length > 16 { 266.0 } else { 226.0 };
+            let rect = rack.rect(224.0 + step as f32 * 38.0, y + step_y, 34.0, 19.0);
             let response = button(
                 ui,
                 rack,
                 rect,
                 (row, "drum-step", step),
-                &(step + 1).to_string(),
+                &(global_step + 1).to_string(),
                 value > 0,
             );
             let head = if row == 2 {
@@ -935,7 +1034,7 @@ impl App {
             } else {
                 self.panel.playing_step909
             };
-            if head == Some(step) {
+            if head == Some(global_step) {
                 ui.painter().rect_stroke(
                     rect.expand(2.0 * rack.scale),
                     3.0 * rack.scale,
@@ -943,26 +1042,140 @@ impl App {
                     egui::StrokeKind::Inside,
                 );
             }
-            if step >= length {
+            if global_step >= length {
                 ui.painter()
                     .rect_filled(rect, 3.0 * rack.scale, Color32::from_black_alpha(155));
             }
             if response.clicked() {
                 self.panel.focus = row;
                 if row == 2 {
-                    self.panel.set_step808(step, value == 0);
+                    self.drum_set_step(row, instrument, global_step, u8::from(value == 0));
                 } else {
-                    let next = self.panel.step909_new_value(
-                        step,
+                    let next = crate::behavior::tr909_step_value(
+                        value,
+                        instrument == 0,
+                        self.panel.toggle_on("tr909.flam_button"),
                         crate::behavior::Mods {
                             ctrl: ui.input(|i| i.modifiers.ctrl),
                             alt: ui.input(|i| i.modifiers.alt),
                         },
                     );
-                    self.panel.set_step909(step, next);
+                    self.drum_set_step(row, instrument, global_step, next);
                 }
             }
         }
+    }
+
+    fn rack_drum_pages(
+        &mut self,
+        ui: &mut Ui,
+        rack: Rack,
+        row: usize,
+        y: f32,
+        length: usize,
+    ) -> usize {
+        if length <= 16 {
+            return 0;
+        }
+        let pattern = self.panel.rows[row].pattern;
+        let page_id = egui::Id::unique(("drum-page", row, pattern));
+        let follow_id = egui::Id::unique(("drum-follow", row));
+        let mut page = ui
+            .data(|d| d.get_temp::<usize>(page_id))
+            .unwrap_or(0)
+            .min(length / 16 - 1);
+        let mut follow = ui.data(|d| d.get_temp::<bool>(follow_id)).unwrap_or(false);
+        let head = if row == 2 {
+            self.panel.playing_step808
+        } else {
+            self.panel.playing_step909
+        };
+        if follow && let Some(head) = head {
+            page = (head / 16).min(length / 16 - 1);
+        }
+        let instrument = if row == 2 {
+            self.panel.inst808
+        } else {
+            self.panel.inst909
+        };
+        let width = 608.0 / (length / 16) as f32;
+        for p in 0..length / 16 {
+            let rect = rack.rect(224.0 + p as f32 * width, y + 226.0, width - 5.0, 31.0);
+            if button(
+                ui,
+                rack,
+                rect,
+                (row, "page", p),
+                &format!("{} · {}–{}", p + 1, p * 16 + 1, p * 16 + 16),
+                page == p,
+            )
+            .clicked()
+            {
+                page = p;
+                follow = false;
+            }
+            for s in 0..16 {
+                let x = 228.0 + p as f32 * width + s as f32 * (width - 13.0) / 16.0;
+                let color = if self.drum_step(row, instrument, p * 16 + s) > 0 {
+                    ACID
+                } else {
+                    BORDER
+                };
+                ui.painter().rect_filled(
+                    rack.rect(x, y + 249.0, (width - 22.0) / 16.0, 4.0),
+                    0.0,
+                    color,
+                );
+            }
+        }
+        let clipboard = egui::Id::unique("drum-page-clipboard");
+        for (i, label) in ["COPY PAGE", "PASTE PAGE", "DUPLICATE"]
+            .into_iter()
+            .enumerate()
+        {
+            if button(
+                ui,
+                rack,
+                rack.rect(224.0 + i as f32 * 91.0, y + 294.0, 86.0, 20.0),
+                (row, label),
+                label,
+                false,
+            )
+            .clicked()
+            {
+                match i {
+                    0 => {
+                        let values = self.drum_page(row, page);
+                        ui.data_mut(|d| d.insert_temp(clipboard, values));
+                    }
+                    1 => {
+                        if let Some(values) = ui.data(|d| d.get_temp::<[[u8; 12]; 16]>(clipboard)) {
+                            self.drum_paste_page(row, page, values);
+                        }
+                    }
+                    _ if page + 1 < length / 16 => {
+                        let values = self.drum_page(row, page);
+                        self.drum_paste_page(row, page + 1, values);
+                        page += 1;
+                        follow = false;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(rack.rect(730.0, y + 294.0, 102.0, 22.0))
+                .id_salt(("drum-follow-control", row)),
+            |ui| {
+                ui.checkbox(&mut follow, "FOLLOW");
+            },
+        );
+        ui.data_mut(|d| {
+            d.insert_temp(page_id, page);
+            d.insert_temp(follow_id, follow);
+        });
+        page
     }
 
     fn rack_mixer(&mut self, ui: &mut Ui, rack: Rack, row: usize, y: f32) {
@@ -1010,7 +1223,18 @@ impl App {
         ui.painter().line_segment(
             [
                 rack.rect(846.0, y + 10.0, 0.0, 0.0).min,
-                rack.rect(846.0, y + ROWS[row].1 - 10.0, 0.0, 0.0).min,
+                rack.rect(
+                    846.0,
+                    y + ROWS[row].1 - 10.0
+                        + if row >= 2 && self.drum_length(row) > 16 {
+                            82.0
+                        } else {
+                            0.0
+                        },
+                    0.0,
+                    0.0,
+                )
+                .min,
             ],
             Stroke::new(rack.scale, BORDER),
         );
@@ -1213,6 +1437,113 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_button_labels_fit_their_original_click_areas() {
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            for scale in [0.6, 0.9, 1.2] {
+                let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(41.0, 18.0) * scale);
+                for text in ["COMP", "PCF", "DIST", "REV", "CON", "CLA", "MAR"] {
+                    let font = fitted_button_font(ui, rect, text, 9.5 * scale, scale);
+                    let galley = ui.painter().layout_no_wrap(text.into(), font, INK);
+                    assert!(galley.size().x <= rect.width() - 7.0 * scale, "{text}");
+                    assert!(galley.size().y <= rect.height() - 3.0 * scale, "{text}");
+                }
+            }
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn extended_pages_and_tb_sidechain_share_the_expanded_rack_transform() {
+        let ctx = egui::Context::default();
+        let mut app = App::new(crate::model::Panel::new(), None);
+        let canvas = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT + 164.0));
+        for lengths in [[16, 16], [32, 16], [64, 32]] {
+            for (i, length) in lengths.into_iter().enumerate() {
+                app.drum_set_length(i + 2, length);
+            }
+            let extra = app.graphite_extra_height();
+            let rack = Rack::fit_height(canvas, HEIGHT + extra);
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(canvas),
+                    ..Default::default()
+                },
+                |ui| {
+                    app.graphite_rack(ui, canvas);
+                },
+            );
+            for (row, area) in sidechain_areas(canvas, extra).into_iter().enumerate() {
+                assert_eq!(area, rack.rect(858.0, ROWS[row].0 + 119.0, 176.0, 39.0));
+                assert!(canvas.contains_rect(area));
+            }
+            output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn tb_step_menu_shows_note_names_and_keeps_accent_and_slide_visible() {
+        fn labels(shape: &egui::Shape, text: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(t) => text.push(t.galley.text().into()),
+                egui::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        labels(shape, text);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let ctx = egui::Context::default();
+        let mut app = App::new(Panel::new(), None);
+        let note = &mut app.panel.synth[0].patterns[0][2];
+        note.note = 5;
+        note.rest = false;
+        note.accent = true;
+        note.slide = true;
+        let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(WIDTH, HEIGHT));
+        let rack = Rack::fit(screen);
+        let position = rack.rect(300.0, ROWS[0].0 + 126.0, 34.0, 27.0).center();
+        let mut text = Vec::new();
+        for pressed in [None, Some(true), Some(false), None] {
+            let events = pressed.map_or_else(Vec::new, |pressed| {
+                vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Secondary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ]
+            });
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.rack_tb(ui, rack, 0, ROWS[0].0),
+            );
+            text.clear();
+            for shape in &output.shapes {
+                labels(&shape.shape, &mut text);
+            }
+            output.textures_delta.clear();
+        }
+        for label in ["STEP 03", "Note", "F", "A", "S", "Rest", "Accent", "Slide"] {
+            assert!(
+                text.iter().any(|text| text == label),
+                "Missing {label}: {text:?}"
+            );
+        }
+        assert!(!text.iter().any(|text| text == "5"));
+        assert_eq!(app.panel.synth[0].patterns[0][2].note, 5);
+        assert!(app.panel.synth[0].patterns[0][2].accent);
+        assert!(app.panel.synth[0].patterns[0][2].slide);
+    }
 
     #[test]
     fn peak_meter_uses_dbfs_and_draws_orange_and_latched_red() {
@@ -1438,7 +1769,7 @@ mod tests {
             output.textures_delta.clear();
         }
         assert!(app.panel.toggle_on("master.comp"));
-        for area in sidechain_areas(rect) {
+        for area in sidechain_areas(rect, 0.0) {
             assert!(rect.contains_rect(area));
             assert!(area.left() > rect.center().x);
         }

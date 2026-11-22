@@ -185,6 +185,7 @@ impl Renderer {
         engine.frame.sidechain.set_config(self.sidechain);
         engine.frame.devices.channels[3].set_closed_hat_level(self.closed_hat_level);
         engine.frame.studio = self.studio.take();
+        engine.frame.sync_studio_drum_banks();
         engine.frame.independent_hats = self.independent_hats;
         let samples = export::export_song(&mut engine, song, idle_blocks)
             .map_err(|r| fail(1, format!("{label}: {r}")))?;

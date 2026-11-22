@@ -6,6 +6,90 @@ use crate::{
 use std::sync::Arc;
 
 #[test]
+fn sampler_sidechain_uses_each_lanes_own_machine_and_voice_with_global_off() {
+    let mut studio = Studio::new(Box::new(Convolver::new(&[[0.0; 2]; 64]).unwrap()));
+    for (i, frame) in [[0.5, 0.0], [0.0, 0.5]].into_iter().enumerate() {
+        studio.sampler.replace(
+            i,
+            Some(Box::new(audio_file::Wave {
+                frames: vec![frame; 44100],
+            })),
+        );
+        let lane = &mut studio.settings.lanes[i];
+        lane.mode = sampler::Mode::Loop;
+        lane.gain = 1.0;
+        lane.sidechain = true;
+        lane.sidechain_source = i as u8 + 1;
+        lane.sidechain_instrument = if i == 0 { 2 } else { 1 };
+        // The gater is intentionally unrelated to the sidechain source.
+        lane.gater_source = 0;
+        studio.sampler.audition(i);
+    }
+    let mut counts = [[0; 12]; 2];
+    let render = |studio: &mut Studio, counts| {
+        studio.modulation(Modulation {
+            gates: [false; 2],
+            drum_triggers: [[0; 12]; 2],
+            drum_counts: counts,
+            audible: [true; 2],
+            config: crate::sidechain::Config::default(),
+            ticks_per_frame: 0.01,
+        });
+        let mut output = [[0.0; 64]; 2];
+        studio.sampler.process(
+            &studio.settings.lanes,
+            0.0,
+            0.01,
+            false,
+            &mut output,
+            &mut [[0.0; 64]; 2],
+        );
+        output.map(|channel| channel.iter().sum::<f64>())
+    };
+    for _ in 0..20 {
+        render(&mut studio, counts);
+    }
+    // Wrong instrument must not trigger the TR-808 SD route.
+    counts[0][1] += 1;
+    let unchanged = render(&mut studio, counts);
+    assert!((unchanged[0] - unchanged[1]).abs() < 1e-6);
+    counts[0][2] += 1;
+    let ducked = render(&mut studio, counts);
+    assert!(
+        ducked[0] < ducked[1] * 0.8,
+        "TR-808 SD must duck only lane 1"
+    );
+    counts[1][1] += 1;
+    render(&mut studio, counts);
+    let both = render(&mut studio, counts);
+    assert!(both[1] < unchanged[1] * 0.5, "TR-909 BD must duck lane 2");
+}
+
+#[test]
+fn legacy_sampler_sidechain_routes_default_to_global() {
+    let lane = sampler::Lane {
+        sidechain: true,
+        sidechain_source: 2,
+        sidechain_instrument: 8,
+        ..sampler::Lane::default()
+    };
+    let mut saved = serde_json::to_value(&lane).unwrap();
+    let object = saved.as_object_mut().unwrap();
+    object.remove("sidechain_source");
+    object.remove("sidechain_instrument");
+    let restored: sampler::Lane = serde_json::from_value(saved).unwrap();
+    assert!(restored.sidechain);
+    assert_eq!(restored.sidechain_source, 0);
+    assert_eq!(restored.sidechain_instrument, 1);
+    let mut clamped = lane;
+    clamped.sidechain_source = 255;
+    clamped.sidechain_instrument = 255;
+    clamped.sanitize();
+    assert_eq!(clamped.sidechain_source, 2);
+    assert_eq!(clamped.sidechain_instrument, 11);
+}
+
+#[test]
 fn studio_meters_capture_all_channel_and_master_samples_without_touching_audio() {
     let mut studio = Studio::new(Box::new(Convolver::new(&[[0.0; 2]; 64]).unwrap()));
     let mut left = [0.0; 64];

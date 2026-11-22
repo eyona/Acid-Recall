@@ -105,6 +105,9 @@ impl Project {
             return Err("Each Studio lane must contain exactly 1024 steps".into());
         }
         metadata.settings.sanitize();
+        for bank in &mut metadata.settings.drum_patterns {
+            Arc::make_mut(bank).sanitize();
+        }
         metadata.sidechain.sanitize();
         metadata.closed_hat = metadata.closed_hat.map(|x| x.min(127));
         let song = take(&mut bytes, 16 * 1024 * 1024)?.to_vec();
@@ -190,6 +193,11 @@ mod tests {
         let mut settings = Settings::default();
         settings.lanes[7].bars = 64;
         settings.lanes[7].steps[1023] = 109;
+        for (i, bank) in settings.drum_patterns.iter_mut().enumerate() {
+            let bank = Arc::make_mut(bank);
+            bank.patterns[31].length = if i == 0 { 32 } else { 64 };
+            bank.patterns[31].steps[47][11] = 4;
+        }
         let project = Project {
             metadata: Metadata {
                 settings,

@@ -907,16 +907,33 @@ impl Audio {
     fn apply(&mut self, c: Command) {
         match c {
             Command::StudioClear => {
+                for channel in &mut self.current.frame.devices.channels[2..] {
+                    channel.set_drum_bank(None);
+                }
                 if let Some(old) = self.current.frame.studio.take() {
                     self.throw(Garbage::Studio(old));
                 }
             }
             Command::Studio(studio) => {
+                for (channel, bank) in self.current.frame.devices.channels[2..]
+                    .iter_mut()
+                    .zip(&studio.settings.drum_patterns)
+                {
+                    channel.set_drum_bank(Some(bank.clone()));
+                }
                 if let Some(old) = self.current.frame.studio.replace(studio) {
                     self.throw(Garbage::Studio(old));
                 }
             }
             Command::StudioSettings(settings) => {
+                if self.current.frame.studio.is_some() {
+                    for (channel, bank) in self.current.frame.devices.channels[2..]
+                        .iter_mut()
+                        .zip(&settings.drum_patterns)
+                    {
+                        channel.set_drum_bank(Some(bank.clone()));
+                    }
+                }
                 let old = if let Some(studio) = &mut self.current.frame.studio {
                     studio.replace_settings(settings)
                 } else {
@@ -1183,6 +1200,14 @@ impl Audio {
             new.frame.studio = self.current.frame.studio.take();
             if let Some(studio) = &mut new.frame.studio {
                 studio.sampler.stop();
+            }
+        }
+        if let Some(studio) = &new.frame.studio {
+            for (channel, bank) in new.frame.devices.channels[2..]
+                .iter_mut()
+                .zip(&studio.settings.drum_patterns)
+            {
+                channel.set_drum_bank(Some(bank.clone()));
             }
         }
         let old = std::mem::replace(&mut self.current, new);
