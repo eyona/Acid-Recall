@@ -1,6 +1,6 @@
-# ACID RECALL — MIDI controller setup (Windows)
+# ACID RECALL 1.0 — MIDI controller setup (Windows)
 
-[ACID RECALL website](https://acid-recall.netlify.app/) · [Studio guide](studio.md)
+[Official website](https://acidrecall.com) · [Studio guide](studio.md)
 
 Control ACID RECALL with a UC-33e or another controller sending absolute MIDI CC messages.
 Windows MIDI input uses the built-in WinMM API. macOS and Linux still build, but their MIDI
@@ -82,10 +82,10 @@ leave your current routing intact. The controls remain in the existing MIDI Cont
 
 `cargo test -p orb-ui --test midi` checks CC decoding, channel filtering, full parameter
 ranges, pickup/re-arming, button edges, selectors, mapping replacement, persistence and
-delivery through the real player. The Windows preview also runs settings, wiring, repaint and
+delivery through the real player. The Windows release pipeline also runs settings, wiring, repaint and
 audio allocation tests and builds a portable executable; the PR CI runs the full workspace.
-A physical UC-33e test is still needed to verify USB enumeration,
-driver opening, button preset behavior and shutdown/reconnection on the user's PC.
+USB enumeration, driver opening, button presets and shutdown/reconnection also depend on
+the controller and its driver; automated tests do not cover every hardware setup.
 
 ## Right-click MIDI Learn and a maximum per control
 

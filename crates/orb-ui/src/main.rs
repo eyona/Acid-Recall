@@ -215,7 +215,11 @@ fn main() -> eframe::Result {
     #[cfg(all(windows, not(debug_assertions)))]
     attach_parent_console();
     // before anything that can panic: a panic writes a crash log and shows a box (task-157)
-    orb_ui::crash::install(orb_ui::about::VERSION);
+    orb_ui::crash::install(concat!(
+        env!("CARGO_PKG_VERSION"),
+        " / ",
+        env!("ORB_UI_VERSION")
+    ));
     let Args {
         studio_view,
         demo,

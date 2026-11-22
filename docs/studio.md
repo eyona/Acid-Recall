@@ -1,10 +1,10 @@
-# ACID RECALL — Studio guide
+# ACID RECALL 1.0 — Studio guide
 
-[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](midi-controller.md)
+[Official website](https://acidrecall.com) · [MIDI controller setup](midi-controller.md) · [1.0 release notes](releases/1.0.0.md)
 
 ## Audio driver, device and latency
 
-Open **Options > Preferences / Audio...**. The Windows x64 preview includes **WASAPI**
+Open **Options > Preferences / Audio...**. The Windows x64 release includes **WASAPI**
 and **ASIO**. A new setup uses the Windows default output through WASAPI; ASIO is selected
 explicitly and remembered. Install your audio interface's **64-bit Windows ASIO driver**
 to see it in the ASIO device list. Other platforms show their available native backends;
@@ -63,7 +63,7 @@ The **MASTER** panel has a separate **COMP** button, also available in the trans
 bus selector, so selecting master compression moves that compressor from a machine to master.
 
 Studio keeps the Graphite interface fixed. The obsolete **Mods** menu and mod startup-sound
-option are hidden; color customization is not part of this preview.
+option are hidden; color customization is not part of version 1.0.
 
 Each TB has a SIDECHAIN block below its routing buttons, with independent enable and depth.
 Bypass retains the depth. TR source, trigger voice and release remain shared, including
@@ -442,7 +442,8 @@ Clock loss in slave mode stops playback; a new external Start or Continue resume
 it. MIDI Learn and controller assignments remain available. IN and OUT are exclusive modes.
 
 See [MIDI Clock setup and limits](midi-clock.md) for hardware connections and transport
-behavior. This preview needs real-hardware timing feedback from testers.
+behavior. Hardware timing depends on the audio interface, MIDI driver, buffer and receiving
+machine; adjust the offsets for your setup. Automated checks cannot cover every hardware combination.
 
 ## MIDI Learn on the rack
 

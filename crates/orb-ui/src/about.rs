@@ -1,6 +1,6 @@
 //! Help > About (task-102, laid out in task-115): the icon, the wordmark, the version and the
-//! project link in a small centered window. The version string is computed by `build.rs`
-//! (`crate::version`).
+//! project link in a small centered window. The public version comes from Cargo; `build.rs`
+//! computes the separate diagnostic build identifier (`crate::version`).
 
 use eframe::egui::{self, Context, Key, Modifiers, RichText};
 
@@ -20,14 +20,14 @@ const ICON_SIZE: f32 = 64.0;
 const CONTENT_W: f32 = 450.0;
 /// The width of the label column of the collection lines (the links start at TEXT_X + this).
 const LABEL_W: f32 = 100.0;
-/// 156 with one link line (task-115), plus two lines at the same 22 pt spacing (task-138).
-const CONTENT_H: f32 = 200.0;
+/// Room for the public version, build identifier, website and two collection links.
+const CONTENT_H: f32 = 222.0;
 const TEXT_X: f32 = 108.0;
 
 /// The name of the app.
 pub const NAME: &str = "ACID RECALL";
 /// The project page.
-pub const URL: &str = "https://github.com/smldms/openrb-338";
+pub const URL: &str = "https://acidrecall.com/";
 /// The user's public collections, shown under the project page as `label url` (task-138).
 /// The user's song collection.
 pub const SONGS_URL: &str = "https://github.com/pingw33n/rb-songs";
@@ -38,8 +38,10 @@ pub const COLLECTIONS: [(&str, &str); 2] = [
     ("Song collection:", SONGS_URL),
     ("Mod collection:", MODS_URL),
 ];
-/// The version: `YYYY.MMDD.HHMM (<[dev-]hash[-dirty]>)` (`src/version.rs`).
-pub const VERSION: &str = env!("ORB_UI_VERSION");
+/// The public application version, shared with Windows file properties and releases.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Build time and source revision retained for diagnostics (`src/version.rs`).
+pub const BUILD: &str = env!("ORB_UI_VERSION");
 
 /// The id of the About window of an open (`App::about_serial`).
 pub fn about_window_id(serial: u32) -> egui::Id {
@@ -148,12 +150,15 @@ impl App {
                     ui.label(RichText::new(format!("Version {VERSION}")).color(INK_DIM));
                 });
                 line(ui, 126.0, &|ui| {
+                    ui.label(RichText::new(format!("Build {BUILD}")).color(INK_DIM));
+                });
+                line(ui, 148.0, &|ui| {
                     ui.hyperlink_to(URL, URL);
                 });
                 for (i, (label, url)) in COLLECTIONS.into_iter().enumerate() {
                     // the label and the link each in a rect of their own, so the links start at
                     // exactly the same x whatever the width of the label
-                    let y = 148.0 + 22.0 * i as f32;
+                    let y = 170.0 + 22.0 * i as f32;
                     line(ui, y, &|ui| {
                         ui.label(RichText::new(label).color(INK_DIM));
                     });

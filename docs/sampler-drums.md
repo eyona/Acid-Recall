@@ -1,6 +1,6 @@
-# ACID RECALL — Sampler and extended patterns
+# ACID RECALL 1.0 — Sampler and extended patterns
 
-[Studio guide](studio.md) · [MIDI controller setup](midi-controller.md)
+[Official website](https://acidrecall.com) · [Studio guide](studio.md) · [MIDI controller setup](midi-controller.md)
 
 ## TR-808 and TR-909
 

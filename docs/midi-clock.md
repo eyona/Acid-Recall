@@ -1,4 +1,6 @@
-# MIDI Clock IN / OUT — ACID RECALL (Windows)
+# MIDI Clock IN / OUT — ACID RECALL 1.0 (Windows)
+
+[Official website](https://acidrecall.com) · [Studio guide](studio.md)
 
 Open MIDI, then **MIDI CLOCK / SYNC**. Clock is off by default. Preferences remember the
 mode, ports, OUT delay and IN offset locally; importing a controller routing file never changes them.

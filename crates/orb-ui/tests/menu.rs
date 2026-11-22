@@ -2058,7 +2058,7 @@ fn the_about_window_opens_centered_and_closes() {
         shapes.contains(orb_ui::about::VERSION),
         "the version is drawn"
     );
-    assert_eq!(orb_ui::about::URL, "https://github.com/smldms/openrb-338");
+    assert_eq!(orb_ui::about::URL, "https://acidrecall.com/");
     assert_eq!(
         orb_ui::about::SONGS_URL,
         "https://github.com/pingw33n/rb-songs"
@@ -2079,8 +2079,13 @@ fn the_about_window_opens_centered_and_closes() {
         data.get_temp::<egui::TextureHandle>(egui::Id::unique("acid-recall-about-icon"))
     });
     assert_eq!(icon.expect("brand icon is loaded").size(), [128, 128]);
-    // the version is `YYYY.MMDD.HHMM (<git>)` (task-133)
-    let v = orb_ui::about::VERSION;
+    assert_eq!(orb_ui::about::VERSION, env!("CARGO_PKG_VERSION"));
+    assert!(
+        shapes.contains(orb_ui::about::BUILD),
+        "build details are drawn"
+    );
+    // The build identifier retains `YYYY.MMDD.HHMM (<git>)` for diagnostics.
+    let v = orb_ui::about::BUILD;
     let b = v.as_bytes();
     let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
     assert!(

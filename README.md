@@ -6,7 +6,7 @@
 
 **The memory returns. The machines come alive.**
 
-**[Visit the ACID RECALL website](https://acid-recall.netlify.app/)**
+**[Visit the official ACID RECALL website](https://acidrecall.com)**
 
 ACID RECALL is a performance-focused fork of **[OpenRB-338 by pingw33n](https://github.com/pingw33n/OpenRB-338)**,
 the open-source reimplementation of ReBirth RB-338. It builds on that foundation with hands-on
@@ -20,10 +20,10 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
     <img src="https://raw.githubusercontent.com/smldms/Acid-Recall/main/assets/brand/download-windows.svg" alt="DOWNLOAD — Windows x64 portable ZIP" width="300" height="64">
   </a>
   <br>
-  <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
+  <sub>Version 1.0 stable · Windows x64 · Free · No installation · No GitHub account required</sub>
 </p>
 
-## Latest preview — 22 November 2026
+## ACID RECALL 1.0 stable — 22 November 2026
 
 - **ACID RECALL project files:** new Save As operations default to **.recall**. Existing
   **.orb338** projects still open and Save keeps their original filenames. The binary
@@ -33,7 +33,8 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   expandable **GATER / SIDECHAIN** settings. SIDECHAIN can use its own TR-808/TR-909
   trigger instrument independently of GATER. AUTO CUT and the existing MIX strip remain.
 - **Extended TR patterns:** **16 steps by default**, with **32 / 64** revealing pages of
-  sixteen steps, FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE. Groove Generator follows
+  sixteen steps and **COPY / PASTE / DUP / FOLLOW** on the left. The rack and its knobs
+  stay fixed at every length. Groove Generator follows
   the whole selected length. Extended patterns save in portable **.recall** projects.
 - **Readable TB editing:** a note-name grid in the right-click menu and independent **A / S**
   indicators for Accent and Slide. Compact routing labels and **CON / CLA / MAR** sound
@@ -86,15 +87,19 @@ or the [TR balance guide](docs/studio.md#tr-808--tr-909-balance).
 **main** contains the current ACID RECALL source and documentation. New changes are
 developed on short-lived branches and reviewed before integration.
 
-- **[Download the Windows preview ZIP](https://github.com/smldms/Acid-Recall/releases/download/windows-preview/ACID-RECALL-Windows-x64.zip)**:
+- **[Download ACID RECALL 1.0 for Windows x64](https://github.com/smldms/Acid-Recall/releases/download/windows-preview/ACID-RECALL-Windows-x64.zip)**:
   extract the ZIP and launch **ACID-RECALL.exe**. No installer or GitHub account is needed.
   The permanent link follows successful public Windows builds from main; it does not expire.
-- **[Release notes](https://github.com/smldms/Acid-Recall/releases/tag/windows-preview)**
-  identify the current build. For previous test builds, see
+- **[1.0 stable release notes](https://github.com/smldms/Acid-Recall/releases/tag/acid-recall-v1.0.0)**
+  and the [changelog](CHANGELOG.md) describe this release. For historical test builds, see
   [GitHub Actions](https://github.com/smldms/Acid-Recall/actions/workflows/midi-windows.yml).
 - **[Read the Studio guide](docs/studio.md)** for sampler, effects, MIDI setup and project limits.
 - **[Visit the original OpenRB-338 project](https://github.com/pingw33n/OpenRB-338)** for the
   upstream implementation, its releases and documentation.
+
+The official 1.0 binary is the **Windows x64 portable ZIP**. macOS and Linux remain source-build
+targets; Android and iPad applications are not included in this release. The permanent download
+URL keeps its historical `windows-preview` path so existing website links continue to work.
 
 ## The story — finding that first spark again
 
@@ -129,7 +134,7 @@ and see where the next session takes it.
 ## What this fork adds
 
 OpenRB-338 provides the original reimplementation and compatibility work.
-The additions below belong to the ACID RECALL Studio preview built on top of it.
+The additions below belong to ACID RECALL 1.0, built on top of it.
 
 | Area | ACID RECALL additions |
 |---|---|
@@ -138,6 +143,7 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 | Drum balance | Smoothed, MIDI-assignable output trims after the inserts; both TRs default to 0 dB, with a quick 0 dB reset. |
 | Portable mappings | Import and export MIDI assignments to move between computers. |
 | Pattern generation | Techno, IDM and Break styles, with notes, accents, slides and Undo. |
+| Extended drums | TR-808/TR-909 patterns of 16, 32 or 64 steps; fixed rack layout, left-side pages and COPY/PASTE/DUP/FOLLOW. |
 | Linked bass lines | Harmonically linked TB patterns with independent lengths, such as 8 and 16 steps. |
 | Arpeggiators | One per TB, using a chosen chord or existing pattern notes; ARP applies the current settings immediately. |
 | Sidechain | Ducking triggered by a selected 808 or 909 voice, with independent depth for each TB. |
@@ -182,8 +188,8 @@ This fork is now called ACID RECALL. The memory returns. The machines come alive
 
 ## Current scope
 
-This is an evolving standalone rack and sequencer. **Windows MIDI Clock IN/OUT is now
-available in the Studio preview.** Choose **MASTER / OUT** to send tempo and transport to
+ACID RECALL 1.0 is a standalone rack and sequencer with **Windows MIDI Clock IN/OUT**.
+Choose **MASTER / OUT** to send tempo and transport to
 external machines, or **SLAVE / IN** to follow their tempo and Start/Continue/Stop.
 Song Position Pointer supports locating; an OUT delay setting helps compensate audio latency.
 The four original machines and the sampler share the synchronized transport. Sampler
@@ -193,11 +199,11 @@ Open **MIDI > MIDI CLOCK / SYNC**, select one mode and the appropriate MIDI port
 Controller assignments and MIDI Learn remain available alongside sync. Clock input and
 output modes are exclusive to avoid feedback. This is MIDI Clock, not MTC or audio sync.
 See the [MIDI Clock setup guide](docs/midi-clock.md)
-for connections, transport behavior and limits. Automated tests pass; real-world timing
-still needs testing with external hardware.
+for connections, transport behavior and limits. Real-world timing depends on the audio
+interface, MIDI driver, buffer and connected machine; adjust offsets for your setup.
 
 The sampler loads audio into memory. File-size and memory limits are explained in the
-[Studio guide](docs/studio.md). Windows preview builds provide the current ACID RECALL experience;
+[Studio guide](docs/studio.md). The Windows x64 release provides the current ACID RECALL experience;
 the upstream project's release packages are a separate distribution.
 
 ## Credits and thanks

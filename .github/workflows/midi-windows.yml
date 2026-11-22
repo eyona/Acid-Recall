@@ -1,4 +1,4 @@
-name: Windows preview
+name: ACID RECALL Windows
 
 on:
   push:
@@ -72,14 +72,21 @@ jobs:
               Write-Output ('STUDIO_' + $studioView.ToUpper() + '_PREVIEW:' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($studioPreviewPath)))
             }
           }
-      - name: Prepare preview
+      - name: Prepare portable release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path midi-preview
           Copy-Item target/release/OpenRB-338.exe midi-preview/ACID-RECALL.exe
+          $acidVersion = (cargo metadata --no-deps --locked --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq 'orb-ui' | Select-Object -ExpandProperty version
+          Set-Content -LiteralPath midi-preview/VERSION -Value $acidVersion -Encoding ascii
+          Copy-Item CHANGELOG.md midi-preview/
+          Copy-Item ('docs/releases/' + $acidVersion + '.md') midi-preview/RELEASE-NOTES.md
+          New-Item -ItemType Directory -Force -Path midi-preview/docs/releases,midi-preview/releases
+          Copy-Item ('docs/releases/' + $acidVersion + '.md') midi-preview/docs/releases/
+          Copy-Item ('docs/releases/' + $acidVersion + '.md') midi-preview/releases/
           New-Item -ItemType Directory -Force -Path midi-preview/docs,midi-preview/assets/brand
-          Copy-Item docs/acid-recall.md,docs/studio.md,docs/midi-controller.md,docs/sampler-drums.md midi-preview/docs/
-          Copy-Item docs/studio.md,docs/midi-controller.md,docs/sampler-drums.md midi-preview/
+          Copy-Item docs/acid-recall.md,docs/studio.md,docs/midi-controller.md,docs/midi-clock.md,docs/sampler-drums.md midi-preview/docs/
+          Copy-Item docs/studio.md,docs/midi-controller.md,docs/midi-clock.md,docs/sampler-drums.md midi-preview/
           Copy-Item assets/brand/acid-recall.png,assets/brand/acid-recall.ico midi-preview/assets/brand/
           Copy-Item LICENSE midi-preview/
           Copy-Item docs/midi-controller.md midi-preview/README-MIDI.md
@@ -120,6 +127,9 @@ jobs:
       group: acid-recall-public-windows-preview
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: ACID-RECALL-Windows-x64
@@ -130,106 +140,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           BUILD_SHA: ${{ github.sha }}
         shell: bash
-        run: |
-          set -euo pipefail
-          (cd midi-preview && zip -r ../ACID-RECALL-Windows-x64.zip .)
-          cat > release-notes.md <<EOF
-          # ACID RECALL — Windows preview
-
-          **[Visit the ACID RECALL website](https://acid-recall.netlify.app/)**
-
-          Download **ACID-RECALL-Windows-x64.zip**, extract it and run **ACID-RECALL.exe**.
-          No installer or GitHub account is required to download the ZIP.
-
-          Includes MIDI Learn, multiple controller inputs, MIDI Clock **MASTER / OUT** and
-          **SLAVE / IN**, Start/Continue/Stop, Song Position Pointer, sampler TIME WARP,
-          arpeggiators, pattern generators, sidechain and convolution reverb.
-
-          MIDI Clock is available under **MIDI > MIDI CLOCK / SYNC**. This is a preview:
-          hardware timing still needs testing on real interfaces and external machines.
-
-          ## Latest changes — 22 November 2026
-
-          - **Stable TR layout:** switching between 16, 32 and 64 steps keeps the entire
-            rack at the same size. Page selectors, COPY / PASTE / DUP and FOLLOW appear
-            in the free space on the left; knobs and step buttons stay in place.
-
-          - **Validated sampler / drum update:** Focus sampler layout, independent SIDECHAIN
-            source and instrument, real TR 16/32/64-step phrases with pages and FOLLOW,
-            full-length Groove Generator, TB note names and Accent / Slide indicators.
-            Existing knobs and effects remain; MASTER has its own COMP button. Compact
-            routing labels and CON / CLA / MAR switches stay inside their buttons.
-            Read README-SAMPLER-DRUMS.md. New projects save as .recall; legacy .orb338
-            projects still open and retain their filename on Save. The project format is unchanged.
-          - **TB note selection fixed:** choose named notes directly in the right-click menu.
-            This avoids the previous nested dropdown closing before a note could be chosen.
-
-          - **ASIO / WASAPI audio preferences:** open Options > Preferences / Audio to
-            choose the backend, audio device, stereo outputs, sample rate and buffer size.
-            APPLY saves the choice locally and keeps the song and samples loaded while
-            stopping playback. Failed changes try the previous output; missing saved
-            outputs fall back to the system default when possible. ASIO needs the
-            interface's installed 64-bit driver. Active backend and observed buffer are shown.
-
-          - **MIDI Clock IN:** the global tempo shows nominal received BPM with proper
-            rounding, independently from phase corrections. Adaptive timestamp averaging
-            reduces jitter and follows deliberate tempo changes promptly.
-          - **Stop / Space:** Studio rewinds to measure 1, including with a pending song.
-            The next MASTER / OUT playback sends Start from the beginning.
-          - **Peak meters:** all samples measured after faders, with orange from −6 dBFS,
-            red at 0 dBFS, a one-second peak hold and three-second CLIP latch. Stereo master
-            L/R values are measured before output clipping and displayed in dBFS.
-
-          - **Sampler Undo / Redo:** undo settings, sequences, WARP anchors and sample
-            loading/unloading. Buttons and Ctrl/Cmd+Z / Shift+Z / Ctrl+Y are available.
-          - **Unload by right-click:** right-click a sample name and choose Unload sample.
-          - **WARP assistance:** acid-green anchors, a white playhead and optional
-            ANALYZE BPM / TRANSIENTS previews. Review Est. BPM with ÷2 / ×2, then use
-            USE ~N BEATS to confirm a beat fit. APPLY SUGGESTIONS adds anchors only on
-            request, preserving existing anchors and their timing.
-          - **Fixed Graphite interface:** the obsolete Mods menu is hidden in Studio.
-
-          - **Sampler playheads:** live source heads on the rack and detailed editor,
-            plus a musical-time head on the WARP grid. Includes audition, reverse and loops.
-          - **More knobs:** Delay Steps and per-sample Pitch, Level and Reverb now use
-            knobs with Shift fine adjustment. Existing MIDI assignments remain valid.
-          - **Delay timing on the rack:** STEPS (1–32) and STRAIGHT / TRIPLET, with MIDI
-            Learn. The detailed editor's unresponsive step controls are fixed.
-          - **Sampler WARP:** fit IN/OUT to the chosen Beats. MARKERS / GRID provides
-            numbered bars, beats and sixteenths, 16 local stretch anchors, snap/free
-            placement and 16× waveform zoom. Anchors save in portable projects.
-            Beat count can be entered manually or confirmed from the optional BPM estimate.
-          - **Easier MIDI Learn:** right-click a rack control, choose **MIDI LEARN...** and
-            move your controller. Right-click again to remove its assignment or choose a
-            personal **MAX (0–127)** for each continuous control. The full physical fader
-            travel reaches that maximum; no per-assignment MIN is needed.
-          - **TR output trims:** both TRs default to **0 dB**, removing the automatic +6 dB
-            808 boost. Smoothed TRIM controls span −12 to +12 dB and follow insert effects
-            to preserve their drive and tone. Use the **0 dB** buttons to reset trims saved
-            by earlier previews; existing project values are preserved.
-          - **Updated help:** the ZIP includes a MIDI Learn quick start and TR balance
-            instructions in README-MIDI.md and README-STUDIO.md.
-
-          New Clock OUT settings default to 30 ms; Clock IN has a signed phase offset.
-
-          Machine power and effect ON/OFF/routing buttons now follow absolute 0/127 CC
-          states like the sampler. Its MIX strip now matches the four original machines,
-          with the same compact fader, green ten-segment meter and control alignment.
-
-          Thanks to **[Matth23d (@matth23d)](https://x.com/matth23d)** for restoring the
-          Evolution UC-33e that inspired this project.
-
-          This rolling preview is updated after successful main-branch Windows builds.
-          Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}
-          EOF
-          if gh release view windows-preview > /dev/null 2>&1; then
-            gh release upload windows-preview ACID-RECALL-Windows-x64.zip --clobber
-            gh api --method PATCH "repos/${GH_REPO}/git/refs/tags/windows-preview" \
-              -f "sha=${BUILD_SHA}" -F force=true > /dev/null
-            gh release edit windows-preview --title "ACID RECALL — Windows preview" \
-              --prerelease --notes-file release-notes.md
-          else
-            gh release create windows-preview ACID-RECALL-Windows-x64.zip \
-              --target "${BUILD_SHA}" --title "ACID RECALL — Windows preview" \
-              --prerelease --notes-file release-notes.md
-          fi
+        run: bash scripts/publish-acid-release.sh
