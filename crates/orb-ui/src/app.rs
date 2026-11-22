@@ -689,14 +689,12 @@ impl App {
                                 .max(crate::graphite_rack::HEIGHT * 0.9),
                         );
                         let (canvas, _) = ui.allocate_exact_size(size, Sense::hover());
-                        let layout_extra_height = self.graphite_extra_height();
                         let (sampler, fx) = self.graphite_rack(ui, canvas);
                         self.graphite_sampler(ui, sampler);
                         self.graphite_fx(ui, fx);
-                        for (row, rect) in
-                            crate::graphite_rack::sidechain_areas(canvas, layout_extra_height)
-                                .into_iter()
-                                .enumerate()
+                        for (row, rect) in crate::graphite_rack::sidechain_areas(canvas)
+                            .into_iter()
+                            .enumerate()
                         {
                             self.graphite_sidechain(ui, rect, row);
                         }

@@ -150,6 +150,10 @@ jobs:
 
           ## Latest changes — 22 November 2026
 
+          - **Stable TR layout:** switching between 16, 32 and 64 steps keeps the entire
+            rack at the same size. Page selectors, COPY / PASTE / DUP and FOLLOW appear
+            in the free space on the left; knobs and step buttons stay in place.
+
           - **Validated sampler / drum update:** Focus sampler layout, independent SIDECHAIN
             source and instrument, real TR 16/32/64-step phrases with pages and FOLLOW,
             full-length Groove Generator, TB note names and Accent / Slide indicators.
