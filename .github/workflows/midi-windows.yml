@@ -1,8 +1,8 @@
-name: MIDI Windows preview
+name: Windows preview
 
 on:
   push:
-    branches: [feat/uc33-midi-input, feat/studio-v2, codex/ux-trial-20261122]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,8 @@ jobs:
           New-Item -ItemType Directory -Path midi-preview
           Copy-Item target/release/OpenRB-338.exe midi-preview/ACID-RECALL.exe
           New-Item -ItemType Directory -Force -Path midi-preview/docs,midi-preview/assets/brand
-          Copy-Item docs/acid-recall.md,docs/studio.md midi-preview/docs/
+          Copy-Item docs/acid-recall.md,docs/studio.md,docs/midi-controller.md,docs/sampler-drums.md midi-preview/docs/
+          Copy-Item docs/studio.md,docs/midi-controller.md,docs/sampler-drums.md midi-preview/
           Copy-Item assets/brand/acid-recall.png,assets/brand/acid-recall.ico midi-preview/assets/brand/
           Copy-Item LICENSE midi-preview/
           Copy-Item docs/midi-controller.md midi-preview/README-MIDI.md
@@ -89,7 +90,7 @@ jobs:
           Copy-Item docs/graphite.md midi-preview/README-GRAPHITE.md
           Copy-Item docs/sidechain.md midi-preview/README-SIDECHAIN.md
           Copy-Item docs/studio.md midi-preview/README-STUDIO.md
-          Copy-Item docs/ux-trial.md midi-preview/README-UX-TRIAL.md
+          Copy-Item docs/sampler-drums.md midi-preview/README-SAMPLER-DRUMS.md
           Copy-Item docs/LICENSE-SYMPHONIA.txt midi-preview/LICENSE-SYMPHONIA.txt
           Copy-Item .build-tools/asio/sdk/ASIOSDK/LICENSE.txt midi-preview/LICENSE-ASIO-SDK.txt
           New-Item -ItemType Directory -Force -Path midi-preview/sources
@@ -106,65 +107,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish-ux-trial:
-    name: Publish separate UX trial download
-    needs: windows
-    if: github.ref == 'refs/heads/codex/ux-trial-20261122'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: acid-recall-ux-trial-20261122
-      cancel-in-progress: false
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: ACID-RECALL-Windows-x64
-          path: ux-trial
-      - name: Publish isolated trial ZIP
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          BUILD_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TRIAL_TAG=windows-ux-trial-20261122
-          TRIAL_ZIP=ACID-RECALL-UX-TRIAL-Windows-x64.zip
-          (cd ux-trial && zip -r "../${TRIAL_ZIP}" .)
-          cat > trial-notes.md <<EOF
-          # ACID RECALL — UX trial, 22 November 2026
-
-          Separate test build. The normal DOWNLOAD / windows-preview ZIP stays unchanged.
-          Extract this ZIP into its own folder and run ACID-RECALL.exe.
-
-          - Focus sampler layout with AUTO CUT, WARP, GATER and selectable SIDECHAIN source.
-          - TR-808 / TR-909: 16 steps by default; 32/64 reveal pages, FOLLOW and page copying.
-          - Groove Generator follows the full selected pattern length.
-          - TB note names in the step menu and independent Accent / Slide indicators.
-          - Existing knobs, mixer strips and right-hand effect panels retained.
-
-          Save extended patterns as Studio .orb338 projects. Use Save As for test copies.
-          Please check playback, MIDI sync, saving/reopening and controller assignments.
-          This trial is not version 1.0 stable.
-
-          Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}
-          EOF
-          if gh release view "${TRIAL_TAG}" > /dev/null 2>&1; then
-            gh release upload "${TRIAL_TAG}" "${TRIAL_ZIP}" --clobber
-            gh api --method PATCH "repos/${GH_REPO}/git/refs/tags/${TRIAL_TAG}" \
-              -f "sha=${BUILD_SHA}" -F force=true > /dev/null
-            gh release edit "${TRIAL_TAG}" --prerelease --notes-file trial-notes.md
-          else
-            gh release create "${TRIAL_TAG}" "${TRIAL_ZIP}" --target "${BUILD_SHA}" \
-              --title "ACID RECALL — UX trial (22 November 2026)" --prerelease \
-              --notes-file trial-notes.md
-          fi
-
   publish-preview:
     name: Publish public Windows download
     needs: windows
-    if: github.ref == 'refs/heads/feat/studio-v2'
+    # The consolidation merge keeps the exact ZIP already approved by the user.
+    # Later main commits publish normally after the Windows checks succeed.
+    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[keep-approved-download]')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -201,6 +149,13 @@ jobs:
           hardware timing still needs testing on real interfaces and external machines.
 
           ## Latest changes — 22 November 2026
+
+          - **Validated sampler / drum update:** Focus sampler layout, independent SIDECHAIN
+            source and instrument, real TR 16/32/64-step phrases with pages and FOLLOW,
+            full-length Groove Generator, TB note names and Accent / Slide indicators.
+            Existing knobs and effects remain; MASTER has its own COMP button. Compact
+            routing labels and CON / CLA / MAR switches stay inside their buttons.
+            Read README-SAMPLER-DRUMS.md. Extended phrases save in Studio .orb338 projects.
 
           - **ASIO / WASAPI audio preferences:** open Options > Preferences / Audio to
             choose the backend, audio device, stereo outputs, sample rate and buffer size.
@@ -254,10 +209,10 @@ jobs:
           states like the sampler. Its MIX strip now matches the four original machines,
           with the same compact fader, green ten-segment meter and control alignment.
 
-          Thanks to **[MATTH23D (@matth23d)](https://x.com/matth23d)** for restoring the
+          Thanks to **[Matth23d (@matth23d)](https://x.com/matth23d)** for restoring the
           Evolution UC-33e that inspired this project.
 
-          This rolling preview is updated after successful Studio Windows builds.
+          This rolling preview is updated after successful main-branch Windows builds.
           Build source: https://github.com/${GH_REPO}/commit/${BUILD_SHA}
           EOF
           if gh release view windows-preview > /dev/null 2>&1; then

@@ -1,6 +1,6 @@
 # ACID RECALL — Studio guide
 
-[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-controller.md)
+[ACID RECALL website](https://acid-recall.netlify.app/) · [MIDI controller setup](midi-controller.md)
 
 ## Audio driver, device and latency
 
@@ -59,7 +59,7 @@ and [TR-808 / TR-909 balance](#tr-808--tr-909-balance) below.
 The default desktop view is a native five-module rack: two TBs, the 808, the 909 and an
 integrated sampler. SPACE, Delay, Distortion, PCF, Compressor and the stereo master occupy
 the right column. Per-machine DIST / PCF / COMP / REV switches share one visual style.
-COMP MASTER stays visible in the transport and master strip; it uses the existing compressor
+The **MASTER** panel has a separate **COMP** button, also available in the transport. It uses the existing compressor
 bus selector, so selecting master compression moves that compressor from a machine to master.
 
 Studio keeps the Graphite interface fixed. The obsolete **Mods** menu and mod startup-sound
@@ -67,7 +67,9 @@ option are hidden; color customization is not part of this preview.
 
 Each TB has a SIDECHAIN block below its routing buttons, with independent enable and depth.
 Bypass retains the depth. TR source, trigger voice and release remain shared, including
-sampler ducking. Select BD for kick pumping, or another native voice such as CH or OH.
+sampler ducking in **GLOBAL** mode. Each sampler lane can instead choose its own TR-808/TR-909
+source and trigger instrument, independently of GATER and the TB sidechain. Select BD for
+kick pumping, or another native voice such as CH or OH.
 With BOTH, the labels show the matching native 808 / 909 columns where they differ.
 Enabling one TB from global bypass leaves the other TB bypassed. These settings are saved
 locally and in Studio projects; existing routing files remain compatible.
@@ -77,6 +79,20 @@ visible bar directly in the rack. EDIT / ALL LANES opens the detailed eight-lane
 velocity, copy/paste/repeat, envelopes and less frequent controls. Rack content can scroll in
 smaller windows so sequence controls remain reachable. Each machine's EDIT retains its
 detailed controls; waveform/synthesis, patterns and effects continue to use the same MIDI IDs.
+
+The sampler's Focus layout separates its waveform/playback area, Pitch/Level/Reverb knobs,
+WARP timing row and expandable GATER / SIDECHAIN controls. AUTO CUT remains alongside
+ONE SHOT, GATE, LOOP and REVERSE; the sequence is below the editing area.
+
+TR patterns default to sixteen steps. LENGTH **32 / 64** reveals pages of sixteen steps,
+FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE without moving the voice knobs. Groove Generator
+uses the entire selected length. Save extended patterns in **.orb338** projects; the legacy
+**.rbs** format retains only the native first sixteen steps. Shortening a pattern hides
+later pages without deleting their notes.
+
+TB note keys show **A** for Accent and **S** for Slide. Their right-click menus select notes
+by name rather than numeric pitch. See the [sampler and extended-pattern guide](sampler-drums.md)
+for the complete workflow.
 
 The TR modules expose their real per-voice controls in aligned columns: Level, Tune/Tone,
 Decay, Attack, Snappy and other parameters where that instrument supports them. Unavailable
@@ -317,10 +333,12 @@ an opening ramp. The sampler playhead keeps moving while closed, chopping a voca
 restarting on each drum hit. The source pattern must play an actual note. Old TB-gate source
 IDs remain supported for existing projects and MIDI routing; new UI selections use the TRs.
 
-**Sidechain** independently opts each lane into drum-triggered ducking, before dry mixing and its
-reverb send. It follows the global sidechain On, TR source, selected voice and release with a separate
-65% sampler depth; TB depth controls do not change sampler ducking. Gater transitions do not
-slow down the kick envelope. Both effects are included in offline export and saved in projects.
+**SIDECHAIN** independently opts each lane into drum-triggered ducking, before dry mixing and its
+reverb send. Choose **GLOBAL** to follow the shared On, TR source and selected voice, or choose
+**TR-808 / TR-909** and a trigger instrument for this lane. An explicit lane source works even
+when global sidechain is off. Sampler ducking uses 65% depth and the shared release; TB depth
+controls do not change it. The sidechain source is independent of GATER, and gater transitions
+do not slow down its envelope. Both effects are included in offline export and saved in projects.
 
 ## MIDI
 

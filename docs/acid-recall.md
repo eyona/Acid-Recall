@@ -15,13 +15,23 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
 
 <p align="center">
   <a href="https://github.com/smldms/Acid-Recall/releases/download/windows-preview/ACID-RECALL-Windows-x64.zip">
-    <img src="https://raw.githubusercontent.com/smldms/Acid-Recall/feat/studio-v2/assets/brand/download-windows.svg" alt="DOWNLOAD — Windows x64 portable ZIP" width="300" height="64">
+    <img src="https://raw.githubusercontent.com/smldms/Acid-Recall/main/assets/brand/download-windows.svg" alt="DOWNLOAD — Windows x64 portable ZIP" width="300" height="64">
   </a>
   <br>
   <sub>Windows x64 · Free preview · No installation · No GitHub account required</sub>
 </p>
 
 ## Latest preview — 22 November 2026
+
+- **Sampler Focus:** a clearer waveform and playback area, dedicated WARP controls and
+  expandable **GATER / SIDECHAIN** settings. SIDECHAIN can use its own TR-808/TR-909
+  trigger instrument independently of GATER. AUTO CUT and the existing MIX strip remain.
+- **Extended TR patterns:** **16 steps by default**, with **32 / 64** revealing pages of
+  sixteen steps, FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE. Groove Generator follows
+  the whole selected length. Extended patterns save in portable **.orb338** projects.
+- **Readable TB editing:** note names in the right-click menu and independent **A / S**
+  indicators for Accent and Slide. Compact routing labels and **CON / CLA / MAR** sound
+  switches fit their existing buttons. The master panel has a separate **COMP** button.
 
 - **Audio preferences:** choose **ASIO or WASAPI** on Windows x64 under
   **Options > Preferences / Audio...**, then select the device, stereo outputs, sample rate
@@ -61,22 +71,22 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
   **0 / 127** CC states. Use a latching/toggle controller preset. The sampler now has the
   same **MIX** fader and green ten-segment meter as the four original machines.
 
-Start with the [MIDI controller guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-controller.md)
-or the [TR balance guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/studio.md#tr-808--tr-909-balance).
+Start with the [MIDI controller guide](midi-controller.md),
+the [sampler and extended-pattern guide](sampler-drums.md)
+or the [TR balance guide](studio.md#tr-808--tr-909-balance).
 
 ## Start playing
 
-The ACID RECALL Studio features described here are currently developed on
-[`feat/studio-v2`](https://github.com/smldms/Acid-Recall/tree/feat/studio-v2).
-The default branch still contains the upstream application code while integration is in progress.
+**main** contains the current ACID RECALL source and documentation. New changes are
+developed on short-lived branches and reviewed before integration.
 
 - **[Download the Windows preview ZIP](https://github.com/smldms/Acid-Recall/releases/download/windows-preview/ACID-RECALL-Windows-x64.zip)**:
   extract the ZIP and launch **ACID-RECALL.exe**. No installer or GitHub account is needed.
-  The download updates after successful Studio builds; it does not expire after 30 days.
+  The permanent link follows successful public Windows builds from main; it does not expire.
 - **[Release notes](https://github.com/smldms/Acid-Recall/releases/tag/windows-preview)**
   identify the current build. For previous test builds, see
   [GitHub Actions](https://github.com/smldms/Acid-Recall/actions/workflows/midi-windows.yml).
-- **[Read the Studio guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/studio.md)** for sampler, effects, MIDI setup and project limits.
+- **[Read the Studio guide](studio.md)** for sampler, effects, MIDI setup and project limits.
 - **[Visit the original OpenRB-338 project](https://github.com/pingw33n/OpenRB-338)** for the
   upstream implementation, its releases and documentation.
 
@@ -89,7 +99,7 @@ to make music. Years later, finding OpenRB-338 brought that feeling back. Someon
 recreated ReBirth, and I was thrilled. I could play with those familiar machines again.
 
 There was another part of that reunion: my old Evolution UC-33e controller.
-Its revival is thanks to my friend **[MATTH23D](https://x.com/matth23d)**, who is skilled at restoring this kind of
+Its revival is thanks to my friend **[Matth23d](https://x.com/matth23d)**, who is skilled at restoring this kind of
 older equipment. He also builds **analog x0xb0x synthesizers — TB-303 clones**.
 He brought the UC-33e back into action, and I wanted to put its faders and knobs to work.
 
@@ -158,7 +168,7 @@ A graphite rack for rediscovering familiar machines and building new sessions.
 ## Launch copy
 
 ReBirth was the first music software I ever installed on my PC. Discovering OpenRB-338
-years later made me want to play those machines again. My friend [MATTH23D](https://x.com/matth23d) had brought
+years later made me want to play those machines again. My friend [Matth23d](https://x.com/matth23d) had brought
 my old UC-33e back to life, so I started by connecting it. Then came harmonically linked
 patterns, arpeggiators, sidechain, a sampler, a new interface and MIDI Clock IN/OUT
 sync with external machines.
@@ -176,12 +186,12 @@ The four original machines and the sampler share the synchronized transport. Sam
 Open **MIDI > MIDI CLOCK / SYNC**, select one mode and the appropriate MIDI port.
 Controller assignments and MIDI Learn remain available alongside sync. Clock input and
 output modes are exclusive to avoid feedback. This is MIDI Clock, not MTC or audio sync.
-See the [MIDI Clock setup guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/midi-clock.md)
+See the [MIDI Clock setup guide](midi-clock.md)
 for connections, transport behavior and limits. Automated tests pass; real-world timing
 still needs testing with external hardware.
 
 The sampler loads audio into memory. File-size and memory limits are explained in the
-[Studio guide](https://github.com/smldms/Acid-Recall/blob/feat/studio-v2/docs/studio.md). Windows preview builds provide the current ACID RECALL experience;
+[Studio guide](studio.md). Windows preview builds provide the current ACID RECALL experience;
 the upstream project's release packages are a separate distribution.
 
 ## Credits and thanks
@@ -189,7 +199,7 @@ the upstream project's release packages are a separate distribution.
 - **[pingw33n and the OpenRB-338 contributors](https://github.com/pingw33n/OpenRB-338)**:
   the original open-source reimplementation, engine and historical compatibility work.
   ACID RECALL builds on their work.
-- **[MATTH23D (@matth23d)](https://x.com/matth23d)**: for restoring my Evolution UC-33e and keeping older music hardware alive,
+- **[Matth23d (@matth23d)](https://x.com/matth23d)**: for restoring my Evolution UC-33e and keeping older music hardware alive,
   alongside his work building analog x0xb0x TB-303 clones.
 - **Propellerhead's ReBirth RB-338**: the software that started this story.
 - **[smldms / ACID RECALL](https://github.com/smldms/Acid-Recall)**: this fork's musical direction, additions and continuing development,
