@@ -1,5 +1,6 @@
 //! Portable, versioned Studio container. Samples and IR are embedded, never external paths.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use orb_engine::studio::audio_file::{MAX_AUDIO_BYTES, MAX_FRAMES, Wave};
@@ -8,6 +9,21 @@ use serde::{Deserialize, Serialize};
 
 const MAGIC: &[u8; 8] = b"ORB338S2";
 const MAX_BYTES: usize = 256 * 1024 * 1024;
+
+/// New projects use .recall; the original Studio extension remains fully supported.
+pub fn is_project_path(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("recall") || extension.eq_ignore_ascii_case("orb338")
+    })
+}
+
+pub fn save_path(path: &Path) -> PathBuf {
+    if is_project_path(path) {
+        path.to_path_buf()
+    } else {
+        path.with_extension("recall")
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Metadata {

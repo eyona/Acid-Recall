@@ -54,7 +54,7 @@ use orb_ui::settings::Settings;
 
 /// The visible help: only the song. The developer options are hidden (task-137).
 const USAGE: &str = "usage: ACID-RECALL [SONG]\n\
-                     SONG is a ReBirth song (.rbs) or a Studio project (.orb338) to open";
+                     SONG is a ReBirth song (.rbs) or an Acid Recall project (.recall; legacy .orb338)";
 
 /// The command line, parsed.
 #[derive(Debug, PartialEq)]
@@ -250,9 +250,7 @@ fn main() -> eframe::Result {
         let (l, audio) = Link::new(Arc::new(Tables::new()), samples.clone());
         // The song named on the command line is opened by the app (with its mod).
         if let Some(path) = &song
-            && !path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("orb338"))
+            && !orb_ui::studio::project::is_project_path(path)
         {
             match session::open_song(path) {
                 Ok(o) => startup = Some((path.clone(), o)),
@@ -362,9 +360,7 @@ fn main() -> eframe::Result {
                     app.start(startup);
                 }
                 if let Some(path) = &song
-                    && path
-                        .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("orb338"))
+                    && orb_ui::studio::project::is_project_path(path)
                 {
                     app.open_now(path);
                 }

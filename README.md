@@ -25,13 +25,17 @@ Two acid bass lines. An 808. A 909. Eight sample lanes. A controller under your 
 
 ## Latest preview — 22 November 2026
 
+- **ACID RECALL project files:** new Save As operations default to **.recall**. Existing
+  **.orb338** projects still open and Save keeps their original filenames. The binary
+  container format is unchanged.
+
 - **Sampler Focus:** a clearer waveform and playback area, dedicated WARP controls and
   expandable **GATER / SIDECHAIN** settings. SIDECHAIN can use its own TR-808/TR-909
   trigger instrument independently of GATER. AUTO CUT and the existing MIX strip remain.
 - **Extended TR patterns:** **16 steps by default**, with **32 / 64** revealing pages of
   sixteen steps, FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE. Groove Generator follows
-  the whole selected length. Extended patterns save in portable **.orb338** projects.
-- **Readable TB editing:** note names in the right-click menu and independent **A / S**
+  the whole selected length. Extended patterns save in portable **.recall** projects.
+- **Readable TB editing:** a note-name grid in the right-click menu and independent **A / S**
   indicators for Accent and Slide. Compact routing labels and **CON / CLA / MAR** sound
   switches fit their existing buttons. The master panel has a separate **COMP** button.
 
@@ -146,7 +150,7 @@ The additions below belong to the ACID RECALL Studio preview built on top of it.
 | Rhythmic gating | A gater driven by a selected TR voice, tempo-based Hold, smoothing and optional sidechain. |
 | Sampler mixer | MIDI-assignable ON/OFF, a MIX strip matching the four machines with a compact fader and ten-segment meter, pan, distortion, delay and global reverb. |
 | Interface | A graphite rack with visible TR voice parameters, an integrated sampler and a permanent FX column. |
-| Portable sessions | `.orb338` projects containing samples, impulse responses and Studio settings. |
+| Portable sessions | `.recall` projects containing samples, impulse responses and Studio settings; legacy `.orb338` files still open. |
 
 Sampler, reverb and sidechain controls can be mapped to MIDI. The UC-33e inspired the first
 steps; the mapping system is not limited to that controller.

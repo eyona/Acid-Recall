@@ -1,4 +1,4 @@
-# TB note selection — correction test
+# TB note selection
 
 The previous nested note dropdown could close the right-click menu before showing its choices.
 The named notes now sit directly in the same menu, so selecting a pitch uses one popup.
@@ -9,4 +9,4 @@ The named notes now sit directly in the same menu, so selecting a pitch uses one
 4. Check Accent, Slide and the octave controls, then save/reopen a project copy.
 
 The C+ choice retains the original upper-C pitch. Existing note routing and synthesis are unchanged.
-This is a separate test ZIP; the permanent DOWNLOAD remains unchanged until validation.
+New project copies use .recall; existing .orb338 projects remain supported.

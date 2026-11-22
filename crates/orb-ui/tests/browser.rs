@@ -186,6 +186,48 @@ fn save_asks_before_replacing_a_file() {
     );
 }
 
+#[test]
+fn recall_is_the_default_and_legacy_projects_remain_visible_and_overwrite_guarded() {
+    let d = tempfile::tempdir().unwrap();
+    for name in [
+        "new.recall",
+        "old.orb338",
+        "upper.RECALL",
+        "legacy.ORB338",
+        "song.rbs",
+    ] {
+        fs::write(d.path().join(name), b"test").unwrap();
+    }
+    let s = Settings::default();
+    let open = Browser::new(Mode::OpenSong, &s).with_dir(d.path());
+    for name in [
+        "new.recall",
+        "old.orb338",
+        "upper.RECALL",
+        "legacy.ORB338",
+        "song.rbs",
+    ] {
+        assert!(open.names().contains(&name), "Missing {name}");
+    }
+    let mut save = Browser::new(Mode::SaveSong, &s)
+        .with_studio()
+        .with_dir(d.path());
+    assert_eq!(save.name(), "song.recall");
+    save.set_name("fresh");
+    assert_eq!(save.target().unwrap(), d.path().join("fresh.recall"));
+    let mut s = s;
+    for name in ["new.recall", "old.orb338", "upper.RECALL", "legacy.ORB338"] {
+        save.set_name(name);
+        assert_eq!(save.target().unwrap(), d.path().join(name));
+        assert_eq!(save.accept(&mut s), Poll::Open);
+        assert_eq!(
+            save.pending_overwrite(),
+            Some(d.path().join(name).as_path())
+        );
+        save.decline_overwrite();
+    }
+}
+
 /// The center of a widget after the layout has settled (the first frame of a modal is a
 /// sizing pass).
 fn at(h: &mut Harness, b: &mut Browser, s: &mut Settings, name: &str) -> Pos2 {

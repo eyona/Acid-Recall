@@ -722,7 +722,7 @@ impl App {
                 );
                 ui.small(
                     "File > Save stores samples, IR and all 64 bars together in \
-            a portable .orb338 project.",
+            a portable .recall project (legacy .orb338 projects also open).",
                 );
             });
         self.studio.sampler_open = open;

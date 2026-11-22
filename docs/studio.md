@@ -30,7 +30,7 @@ If opening the new output fails, Acid Recall tries the previous output. A missin
 output at startup falls back to the system default when possible. If neither opens, the
 session remains available: reconnect the device, refresh, choose an output and Apply.
 **Reset to system default** prepares the default selection; click Apply to save it.
-Audio preferences are local to this computer, not embedded in portable `.orb338` projects.
+Audio preferences are local to this computer, not embedded in portable `.recall` projects.
 
 The portable ZIP needs no ASIO SDK or LLVM installation to run. It includes the ASIO SDK
 license and corresponding SDK source archive under `sources/` for the GPLv3 integration.
@@ -86,12 +86,12 @@ ONE SHOT, GATE, LOOP and REVERSE; the sequence is below the editing area.
 
 TR patterns default to sixteen steps. LENGTH **32 / 64** reveals pages of sixteen steps,
 FOLLOW, COPY PAGE, PASTE PAGE and DUPLICATE without moving the voice knobs. Groove Generator
-uses the entire selected length. Save extended patterns in **.orb338** projects; the legacy
+uses the entire selected length. Save extended patterns in **.recall** projects; the legacy
 **.rbs** format retains only the native first sixteen steps. Shortening a pattern hides
 later pages without deleting their notes.
 
-TB note keys show **A** for Accent and **S** for Slide. Their right-click menus select notes
-by name rather than numeric pitch. See the [sampler and extended-pattern guide](sampler-drums.md)
+TB note keys show **A** for Accent and **S** for Slide. Their right-click menus use a note-name
+grid rather than numeric pitch. See the [sampler and extended-pattern guide](sampler-drums.md)
 for the complete workflow.
 
 The TR modules expose their real per-voice controls in aligned columns: Level, Tune/Tone,
@@ -252,7 +252,7 @@ source positions; trimming removes anchors outside the new region and preserves 
 The built-in time-domain engine uses stereo waveform-similarity overlap-add with a fixed
 grain/search budget per voice. It reads the original PCM and does not allocate memory,
 copy whole stretched files or decode audio on the callback. Both stereo channels share
-grain alignment. Warp settings and anchors save in portable `.orb338` projects. Loading
+grain alignment. Warp settings and anchors save in portable `.recall` projects. Loading
 a replacement sample resets Warp, beat fitting and anchors instead of reusing another
 recording's map.
 
@@ -357,11 +357,15 @@ The per-input minimum-CC calibration applies to the new knobs as well.
 
 ## Saving and exporting
 
-Once Studio content is used, **Save / Save As** writes a portable **.orb338** project. It
+Once Studio content is used, new **Save As** operations default to a portable **.recall** project. It
 embeds the original RBS song, samples, IR, all sampler steps, settings, sidechain and
 independent closed-hat level. Open it through File > Open. The versioned container validates
 section sizes and checksums before replacing the current song. A standard RBS opened and
 edited without Studio content continues to save as RBS.
+
+Existing **.orb338** projects still open. Saving an opened legacy project keeps its filename
+and extension; use **Save As** to create a new `.recall` copy. The extension has changed,
+but the versioned binary container format is unchanged.
 
 MIDI routing remains an application/controller preset; use MIDI Import/Export to move it.
 Custom RBM drum kits remain external, as with ordinary RBS songs.
@@ -468,6 +472,6 @@ Trim changes are smoothed and apply **after distortion, PCF and compression**, b
 the meters, delay and reverb sends. Changing TRIM therefore adjusts the output level
 without pushing the insert effects harder. Each TR has a **0 dB** button to reset its
 trim, including a +6 dB value saved by a previous preview. Saved values are not silently
-overwritten. They save in portable `.orb338` projects. Older Studio projects without trim metadata
+overwritten. They save in portable `.recall` projects. Older Studio projects without trim metadata
 load at **0 dB on both drums**, preserving their previous mix. Legacy engine renders
 without Studio retain their original arithmetic and output.

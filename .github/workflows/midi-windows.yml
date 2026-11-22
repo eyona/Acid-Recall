@@ -155,7 +155,10 @@ jobs:
             full-length Groove Generator, TB note names and Accent / Slide indicators.
             Existing knobs and effects remain; MASTER has its own COMP button. Compact
             routing labels and CON / CLA / MAR switches stay inside their buttons.
-            Read README-SAMPLER-DRUMS.md. Extended phrases save in Studio .orb338 projects.
+            Read README-SAMPLER-DRUMS.md. New projects save as .recall; legacy .orb338
+            projects still open and retain their filename on Save. The project format is unchanged.
+          - **TB note selection fixed:** choose named notes directly in the right-click menu.
+            This avoids the previous nested dropdown closing before a note could be chosen.
 
           - **ASIO / WASAPI audio preferences:** open Options > Preferences / Audio to
             choose the backend, audio device, stereo outputs, sample rate and buffer size.
